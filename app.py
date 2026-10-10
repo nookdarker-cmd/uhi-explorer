@@ -98,7 +98,11 @@ def aqua_day(img):
     """MODIS Aqua รายวัน -> LST (°C) เฉพาะพิกเซลคุณภาพดีที่ถ่ายช่วง 12-14 น."""
     raw = img.select('LST_Day_1km')
     t = img.select('Day_view_time').multiply(0.1)          # ชั่วโมง (เวลาสุริยะท้องถิ่น)
-    good = (img.select('QC_Day').bitwiseAnd(3).eq(0)       # คุณภาพดี
+    qc = img.select('QC_Day')
+    # รับทั้ง "คุณภาพดี" และ "คุณภาพอื่น" ถ้าความคลาดเคลื่อนของ LST ไม่เกิน 2 K
+    # (ถ้ารับเฉพาะคุณภาพดี ย่านเมืองหนาแน่นจะหายไปมาก เพราะวัสดุหลากหลาย)
+    good = (qc.bitwiseAnd(3).lte(1)                        # bits 0-1: ผลิตค่าได้
+            .And(qc.rightShift(6).bitwiseAnd(3).lte(1))    # bits 6-7: error <= 2 K
             .And(t.gte(HOUR_MIN)).And(t.lte(HOUR_MAX))
             .And(raw.gt(0)))
     lst = raw.multiply(0.02).subtract(273.15).rename('LST')
@@ -134,7 +138,11 @@ def viirs_day_factory():
     def viirs_day(img):
         raw = img.select('LST_1KM').multiply(lst_k)
         t = img.select('View_Time').multiply(time_k)
-        good = (img.select('QC').bitwiseAnd(3).eq(0)
+        qc = img.select('QC')
+        # เกณฑ์เดียวกับ Aqua: ผลิตค่าได้, ท้องฟ้าโปร่ง, ความแม่นยำ LST ไม่แย่กว่า 2 K
+        good = (qc.bitwiseAnd(3).lte(1)                        # bits 0-1: ผลิตค่าได้
+                .And(qc.rightShift(4).bitwiseAnd(3).eq(0))     # bits 4-5: ไม่มีเมฆ
+                .And(qc.rightShift(14).bitwiseAnd(3).gte(1))   # bits 14-15: error <= 2 K
                 .And(t.gte(HOUR_MIN)).And(t.lte(HOUR_MAX))
                 .And(raw.gt(200)))
         lst = raw.subtract(273.15).rename('LST')
