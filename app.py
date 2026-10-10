@@ -60,6 +60,7 @@ FIRST_YEAR = 2003                # ปีแรกที่ Aqua มีข้อ
 AQUA_LAST_YEAR = 2022            # หลังจากนี้ Aqua เลื่อนเวลาผ่านจนเกิน 14 น.
 DW_FIRST_YEAR = 2016             # ปีแรกที่ Dynamic World มีข้อมูลเต็มปี
 BIAS_YEARS = (2013, 2020)        # ช่วงที่ใช้ปรับเทียบ VIIRS กับ Aqua
+CHECK_YEARS = (2021, 2022)       # ช่วงที่ใช้ตรวจสอบการปรับเทียบ (ไม่ได้ใช้ตอนปรับเทียบ)
 LAST_YEAR = datetime.now().year - 1
 DEFAULT_YEAR = min(2022, LAST_YEAR)
 POP_EPOCHS = (2005, 2010, 2015, 2020)
@@ -323,7 +324,7 @@ def mean_agg(img):
 # ---------------------------------------------------------------- คำนวณล่วงหน้า (assets)
 
 def needed_assets():
-    names = ['static', 'vbias']
+    names = ['static', 'vbias', 'vcheck']
     names += [f'lst_{y}' for y in range(FIRST_YEAR, LAST_YEAR + 1)]
     names += [f'dw_{y}' for y in range(DW_FIRST_YEAR, LAST_YEAR + 1)]
     return names
@@ -344,6 +345,14 @@ def build_asset(name):
         return ee.Image.cat(bands).toFloat()
     if name == 'vbias':
         return ee.Image.cat([vbias(s).rename(f'VB_{s}') for s in SEASONS]).toFloat()
+    if name == 'vcheck':
+        # ตรวจสอบการปรับเทียบด้วยปีที่ไม่ได้ใช้ปรับเทียบ: (VIIRS − ส่วนต่าง) − Aqua
+        s, e = f'{CHECK_YEARS[0]}-01-01', f'{CHECK_YEARS[1] + 1}-01-01'
+        bands = []
+        for se in SEASONS:
+            v = viirs_col(s, e, se).mean().subtract(vbias(se))
+            bands.append(v.subtract(aqua_col(s, e, se).mean()).rename(f'D_{se}'))
+        return ee.Image.cat(bands).toFloat()
     kind, year = name.split('_')
     year = int(year)
     if kind == 'lst':
@@ -909,6 +918,30 @@ def change():
             return {'season': season, 'rows': grouped_rows(groups, CHANGE_LABELS), 'fast': fast}
 
         return jsonify(cached(f'change|{region_key(data)}|{season}|{fast}', calc))
+    except Exception as e:
+        return error_response(e)
+
+
+@app.route('/api/validate', methods=['POST'])
+def validate():
+    """ความคลาดเคลื่อนของ VIIRS ที่ปรับเทียบแล้วเทียบกับ Aqua ในย่านที่มีคนอยู่"""
+    try:
+        data = request.get_json(force=True)
+        season = read_season(data)
+        region = build_region(data)
+        if not assets_ready(['vcheck', 'static']):
+            return jsonify({'ready': False})
+
+        def calc():
+            d = A('vcheck').select(f'D_{season}').rename('D')
+            d = d.updateMask(A('static').select('DENS2020').gte(POP_ANY))
+            stats = rr(d.addBands(d.abs().rename('ABS')),
+                       ee.Reducer.mean().combine(ee.Reducer.count(), sharedInputs=True),
+                       region).getInfo()
+            return {'ready': True, 'season': season, 'years': CHECK_YEARS,
+                    'bias_years': BIAS_YEARS, 'mean': stats.get('D_mean'),
+                    'mae': stats.get('ABS_mean'), 'count': stats.get('D_count')}
+        return jsonify(cached(f'validate|{region_key(data)}|{season}', calc))
     except Exception as e:
         return error_response(e)
 

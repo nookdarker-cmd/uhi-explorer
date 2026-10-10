@@ -370,7 +370,7 @@ const LAYERS = {
   priority: { name: 'ย่านที่ควรปรับปรุง', desc: 'ร้อนมาก + คนหนาแน่น + เขียวน้อย', minZoom: 8, season: true },
   lst: { name: 'อุณหภูมิพื้นผิวช่วงบ่าย', desc: '12–14 น. · ช่องละ 1 กม.', minZoom: 5, season: true },
   green: { name: 'พื้นที่สีเขียว', desc: 'ต้นไม้ หญ้า สวน · ละเอียด 10 ม.', minZoom: 9 },
-  open: { name: 'ที่โล่งในย่านที่มีคนอยู่', desc: 'หญ้าและดินเปล่าที่อาจทำเป็นพื้นที่สีเขียว', minZoom: 10 },
+  open: { name: 'ที่โล่งในย่านที่มีคนอยู่', desc: 'พุ่มไม้ ทุ่งหญ้า ดินเปล่า ที่อาจทำเป็นพื้นที่สีเขียว · 10 ม.', minZoom: 10 },
   built: { name: 'สิ่งปลูกสร้างและถนน', desc: 'อาคาร ถนน ลานคอนกรีต · ละเอียด 10 ม.', minZoom: 9 },
   built_change: { name: 'สิ่งปลูกสร้างที่เพิ่มขึ้น', desc: 'ปี 2005 → 2020', minZoom: 6 }
 };
@@ -583,7 +583,7 @@ function renderLegend() {
       <small>เร่งด่วน = ช่วงบ่ายเกิน ${cfg.very_hot} °C, คนอยู่ ${nf(cfg.pop_dense)} คน/ตร.กม. ขึ้นไป, พื้นที่สีเขียวไม่ถึง ${Math.round(cfg.green_low * 100)}%</small>`,
     lst: `<h4>อุณหภูมิพื้นผิวช่วงบ่าย (12–14 น.)</h4>${lstRows()}<small>ระดับสีเพื่อให้เห็นภาพ ไม่ใช่เกณฑ์ทางการ</small>`,
     green: `<h4>พื้นที่สีเขียว</h4>${gradient(['#d9f0a3', '#78c679', '#238443', '#004529'], 'เขียวบางส่วน', 'เขียวเต็มพื้นที่')}`,
-    open: `<h4>ที่โล่งในย่านที่มีคนอยู่</h4>${gradient(['#f3d27a', '#b5651d'], 'หญ้า/ดินเปล่าบางส่วน', 'โล่งทั้งหมด')}<small>เป็นจุดที่น่าตรวจสอบ ไม่ได้บอกว่าเป็นที่ว่างที่ใช้ได้จริง</small>`,
+    open: `<h4>ที่โล่งในย่านที่มีคนอยู่</h4><div class="row"><span class="sw" style="background:#c8873a"></span>พุ่มไม้ ทุ่งหญ้า ดินเปล่า (10 ม.)</div><small>จาก ESA WorldCover 2021 · เป็นจุดที่น่าตรวจสอบ ไม่ได้บอกว่าเป็นที่ว่างที่ใช้ได้จริง</small>`,
     built: `<h4>สิ่งปลูกสร้างและถนน</h4>${gradient(['#dadaeb', '#9e9ac8', '#6a51a3', '#3f007d'], 'บางส่วน', 'หนาแน่น')}`,
     built_change: `<h4>สิ่งปลูกสร้างที่เพิ่มขึ้น 2005 → 2020</h4>${gradient(['#fde0ef', '#f1b6da', '#de77ae', '#c51b7d', '#8e0152'], '+2 จุด', '+40 จุดขึ้นไป')}<small>จุดเปอร์เซ็นต์ของพื้นที่อาคารต่อเซลล์ 100 ม.</small>`
   };
@@ -662,6 +662,16 @@ function refreshPanel() {
   else loadHistory();
 }
 
+// ---------- ตรวจสอบการปรับเทียบ VIIRS ----------
+async function appendValidation(el, my, tabName) {
+  try {
+    const v = await getData('validate', '/api/validate', { ...state.focus.payload, season: state.season });
+    if (my !== seq || state.tab !== tabName || !v.ready || !v.count || v.mean == null) return;
+    const sign = v.mean >= 0 ? '+' : '−';
+    el.insertAdjacentHTML('beforeend', `<p class="note">ตรวจสอบการปรับเทียบ VIIRS: ในปี ${v.years[0]}–${String(v.years[1]).slice(2)} ซึ่งไม่ได้ใช้ตอนปรับเทียบ ค่า VIIRS ที่ปรับแล้วต่างจาก Aqua เฉลี่ย ${sign}${f1(Math.abs(v.mean))} °C (คลาดเคลื่อนเฉลี่ยรายช่อง ${f1(v.mae)} °C) ในย่านที่มีคนอยู่ของพื้นที่นี้</p>`);
+  } catch (err) { /* ไม่จำเป็นต้องแจ้ง */ }
+}
+
 // ---------- แท็บ: ภาพรวม ----------
 async function loadOverview() {
   const my = seq, el = $('tab-overview');
@@ -671,6 +681,7 @@ async function loadOverview() {
     const d = await getData('summary', '/api/summary', { ...state.focus.payload, year: state.year, season: state.season });
     if (my !== seq || state.tab !== 'overview' || !sameYS(d)) return;
     el.innerHTML = renderOverview(d);
+    if (d.source === 'VIIRS') appendValidation(el, my, 'overview');
   } catch (err) {
     if (my === seq && state.tab === 'overview') el.innerHTML = `<div class="empty">${errMsg(err)}</div>`;
   } finally { stop(); }
@@ -828,7 +839,7 @@ async function loadHistory() {
   try {
     const d = await getData(view, '/api/' + view, { ...state.focus.payload, season: state.season });
     if (my !== seq || state.tab !== 'history' || state.histView !== view || d.season !== state.season) return;
-    if (view === 'trend') renderTrend(d); else renderChange(d);
+    if (view === 'trend') { renderTrend(d); appendValidation($('histOut'), my, 'history'); } else renderChange(d);
   } catch (err) {
     if (my === seq && state.tab === 'history') $('histOut').innerHTML = `<div class="empty">${errMsg(err)}</div>`;
   } finally { stop(); }
