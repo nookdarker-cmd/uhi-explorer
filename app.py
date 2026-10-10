@@ -300,8 +300,9 @@ def worldcover_open():
     return out.rename('OPEN')
 
 
-def open_agg():
-    return (worldcover_open().reproject(crs='EPSG:4326', scale=30)
+def open_agg(scale=30):
+    """สัดส่วนที่โล่งต่อช่อง: asset ใช้ 30 ม. (ละเอียด), การคำนวณสดใช้ 100 ม. (เร็วกว่า ~10 เท่า)"""
+    return (worldcover_open().reproject(crs='EPSG:4326', scale=scale)
             .reduceResolution(reducer=ee.Reducer.mean(), maxPixels=1024).rename('OPEN'))
 
 
@@ -324,9 +325,13 @@ def mean_agg(img):
 # ---------------------------------------------------------------- คำนวณล่วงหน้า (assets)
 
 def needed_assets():
-    names = ['static', 'vbias', 'vcheck']
-    names += [f'lst_{y}' for y in range(FIRST_YEAR, LAST_YEAR + 1)]
-    names += [f'dw_{y}' for y in range(DW_FIRST_YEAR, LAST_YEAR + 1)]
+    """เรียงตามความสำคัญ: ปีที่เปิดเป็นค่าเริ่มต้นก่อน แล้วข้อมูลย้อนหลัง แล้วปีอื่น ๆ"""
+    d = DEFAULT_YEAR
+    names = ['static', f'lst_{d}', f'dw_{d}']
+    names += [f'lst_{y}' for y in range(FIRST_YEAR, AQUA_LAST_YEAR + 1) if y != d]
+    names += ['vbias'] + [f'lst_{y}' for y in range(AQUA_LAST_YEAR + 1, LAST_YEAR + 1) if y != d]
+    names += [f'dw_{y}' for y in range(LAST_YEAR, DW_FIRST_YEAR - 1, -1) if y != d]
+    names += ['vcheck']
     return names
 
 
@@ -392,15 +397,27 @@ def ee_tasks():
         for op in ee.data.listOperations():
             md = op.get('metadata', {})
             out.append({'desc': md.get('description', ''), 'state': md.get('state', ''),
-                        'error': (op.get('error') or {}).get('message')})
+                        'error': (op.get('error') or {}).get('message'),
+                        'name': op.get('name'), 'create': md.get('createTime', '')})
     except Exception:
         try:
             for t in ee.data.getTaskList():
                 out.append({'desc': t.get('description', ''), 'state': t.get('state', ''),
-                            'error': t.get('error_message')})
+                            'error': t.get('error_message'), 'name': t.get('id'),
+                            'create': str(t.get('creation_timestamp_ms', ''))})
         except Exception as e:
             out.append({'desc': '', 'state': 'LIST_ERROR', 'error': str(e)})
     return [t for t in out if t['desc'].startswith(TASK_PREFIX)]
+
+
+def cancel_task(t):
+    try:
+        ee.data.cancelOperation(t['name'])
+    except Exception:
+        try:
+            ee.data.cancelTask(str(t['name']).rsplit('/', 1)[-1])
+        except Exception as e:
+            print('[precompute] cancel failed', t['desc'], e, flush=True)
 
 
 def ensure_folder():
@@ -422,8 +439,18 @@ def ensure_precompute():
     try:
         ensure_folder()
         have = existing_assets(force=True)
-        active = {t['desc'] for t in ee_tasks()
-                  if t['state'] in ('PENDING', 'RUNNING', 'READY')}
+        tasks = ee_tasks()
+        rank = {TASK_PREFIX + n: i for i, n in enumerate(needed_assets())}
+        pending = [t for t in tasks if t['state'] in ('PENDING', 'READY')]
+        running = {t['desc'] for t in tasks if t['state'] == 'RUNNING'}
+        # ถ้างานที่รอคิวเรียงไม่ตรงลำดับความสำคัญ ยกเลิกแล้วสั่งใหม่ตามลำดับ (งานที่วิ่งอยู่ไม่แตะ)
+        order = [rank.get(t['desc'], 999) for t in sorted(pending, key=lambda t: t['create'] or '')]
+        if order != sorted(order):
+            for t in pending:
+                cancel_task(t)
+            print('[precompute] reordered', len(pending), 'pending tasks', flush=True)
+            pending = []
+        active = running | {t['desc'] for t in pending}
         region = export_region()
         for name in needed_assets():
             desc = TASK_PREFIX + name
@@ -481,7 +508,7 @@ def layers(year, season, region):
             lst = lst.subtract(vbias(season)).rename('LST')
         cover = dw_agg(dwy, region).reproject(GRID)
         dens = mean_agg(pop_density(epoch)).reproject(GRID)
-        open_ = open_agg().reproject(GRID)
+        open_ = open_agg(100).reproject(GRID)
     green = cover.select('TREES').add(cover.select('GRASS')).rename('GREEN')
     return {'lst': lst, 'source': source, 'dw_year': dwy, 'pop_epoch': epoch,
             'cover': cover, 'dens': dens, 'green': green, 'open': open_, 'fast': fast}

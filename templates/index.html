@@ -532,8 +532,17 @@ async function loadOverlay() {
     let pending = 0;
     overlay.on('loading', () => progress(true));
     overlay.on('load', () => progress(false));
-    overlay.on('tileerror', () => {
-      if (pending++ === 0) setStatus('บางส่วนของแผนที่คำนวณไม่ทัน ลองซูมเข้าหรือรอสักครู่');
+    // ช่องแผนที่ที่คำนวณไม่ทัน ลองโหลดใหม่อัตโนมัติสูงสุด 3 ครั้ง (Earth Engine มักคำนวณต่อจนเสร็จ)
+    overlay.on('tileerror', e => {
+      const img = e.tile;
+      const tries = +(img.dataset.tries || 0);
+      if (tries < 3) {
+        img.dataset.tries = tries + 1;
+        const url = img.src;
+        setTimeout(() => { img.src = ''; img.src = url; }, 2500 * (tries + 1));
+        return;
+      }
+      if (pending++ === 0) setStatus('บางส่วนของแผนที่ยังคำนวณไม่เสร็จ ระบบกำลังเตรียมข้อมูลล่วงหน้า ลองซูมเข้าหรือกลับมาอีกครั้งภายหลัง');
     });
     overlay.addTo(map);
     if (map.getZoom() < overlayMinZoom) progress(false);
