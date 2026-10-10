@@ -1032,6 +1032,18 @@ async function loadProvinces() {
   }
 }
 
+// ซูมไปที่พื้นที่ เว้นที่ให้แผงข้อมูล (ถ้าหน้าถูกซ่อนอยู่ ขนาดแผนที่เป็น 0 จะรอจนกลับมาแสดง)
+function fitFocus(layer) {
+  map.invalidateSize();
+  const size = map.getSize();
+  if (!size.x || !size.y) {
+    document.addEventListener('visibilitychange', () => { if (focusLayer === layer) fitFocus(layer); }, { once: true });
+    return;
+  }
+  const wide = document.body.classList.contains('panel-open') && window.innerWidth > 860;
+  map.fitBounds(layer.getBounds(), { paddingTopLeft: [20, 20], paddingBottomRight: [wide ? $('panel').offsetWidth + 30 : 20, 100], maxZoom: 13 });
+}
+
 async function selectProvince(en) {
   cancelDraw();
   setFocusLayer(null);
@@ -1042,8 +1054,7 @@ async function selectProvince(en) {
     if (!state.focus || state.focus.payload.province !== en) return;
     const layer = L.geoJSON(g, { interactive: false, style: FOCUS_STYLE }).addTo(map);
     setFocusLayer(layer);
-    const wide = document.body.classList.contains('panel-open') && window.innerWidth > 860;
-    map.fitBounds(layer.getBounds(), { paddingTopLeft: [20, 20], paddingBottomRight: [wide ? $('panel').offsetWidth + 30 : 20, 100] });
+    fitFocus(layer);
   } catch (err) {
     setStatus('โหลดขอบเขตจังหวัดไม่ได้: ' + errMsg(err));
   }
