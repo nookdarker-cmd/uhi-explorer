@@ -1,0 +1,1108 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>แผนที่ความร้อนเมือง · Urban Heat Explorer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anuphan:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --paper: #fbf8f3;
+      --panel: #fffdf9;
+      --ink: #1d2327;
+      --muted: #6b7378;
+      --line: #e7e0d5;
+      --soft: #f3eee6;
+      --primary: #0e5a6a;
+      --primary-soft: #e3f0f2;
+      --heat: #d1352b;
+      --shadow: 0 10px 30px rgba(29, 35, 39, .14), 0 2px 6px rgba(29, 35, 39, .08);
+      --radius: 14px;
+      --gap: 12px;
+      --panel-w: clamp(380px, 38vw, 560px);
+      --bar-h: 60px;
+      --font: 'IBM Plex Sans Thai', system-ui, sans-serif;
+      --display: 'Anuphan', 'IBM Plex Sans Thai', system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; font-family: var(--font); color: var(--ink); background: var(--paper); }
+    button, select, input { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+    [hidden] { display: none !important; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+    .muted { color: var(--muted); }
+    .icon { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+    /* ---------- แผนที่ ---------- */
+    #map { position: absolute; inset: 0; background: #e9e5df; }
+    .leaflet-container { font-family: var(--font); }
+    .leaflet-top.leaflet-left { margin: 4px 0 0 4px; }
+    .leaflet-bar { border: 1px solid var(--line) !important; border-radius: 12px !important; box-shadow: var(--shadow) !important; overflow: hidden; }
+    .leaflet-bar a { width: 38px !important; height: 38px !important; line-height: 38px !important; color: var(--ink) !important; background: var(--panel) !important; border-bottom-color: var(--line) !important; display: flex !important; align-items: center; justify-content: center; font-size: 20px; }
+    .leaflet-bar a:hover { background: var(--soft) !important; }
+    .leaflet-bottom.leaflet-left { margin-bottom: calc(var(--bar-real, var(--bar-h)) + 2 * var(--gap)); margin-left: 4px; }
+    .leaflet-control-attribution { font-size: 10px; background: rgba(255,253,249,.8) !important; border-radius: 6px 0 0 0; }
+
+    #progress { position: absolute; top: 0; left: 0; height: 3px; width: 0; z-index: 1300; background: linear-gradient(90deg, #fdae61, var(--heat)); transition: width .4s ease, opacity .3s; opacity: 0; }
+    #progress.on { width: 70%; opacity: 1; transition: width 8s cubic-bezier(.1,.6,.3,1); }
+    #progress.done { width: 100%; opacity: 0; }
+
+    .chip { position: absolute; z-index: 1000; left: 50%; transform: translateX(-50%); top: 14px; padding: 8px 14px; border-radius: 999px; background: var(--ink); color: #fff; font-size: 13px; box-shadow: var(--shadow); display: flex; gap: 8px; align-items: center; }
+
+    /* ---------- ชั้นข้อมูล (ขวาบน) ---------- */
+    #layers { position: absolute; top: var(--gap); right: var(--gap); z-index: 1250; width: 300px; max-width: calc(100vw - 90px); }
+    #layers:not(.collapsed) .layer-body { max-height: calc(100vh - 90px); overflow: auto; }
+    #layers.collapsed { width: auto; }
+    #layerToggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 12px; border: 0; background: none; border-radius: var(--radius); font-weight: 600; }
+    #layerToggle:hover { background: var(--soft); }
+    #layers.collapsed #layerToggle .label { display: none; }
+    #layerToggle .chev { margin-left: auto; transition: transform .2s; }
+    #layers.collapsed .chev { display: none; }
+    .layer-body { padding: 0 12px 12px; }
+    #layers.collapsed .layer-body { display: none; }
+    .layer-opt { display: grid; grid-template-columns: 16px 1fr; gap: 2px 10px; align-items: start; padding: 8px 10px; border-radius: 10px; border: 1px solid transparent; cursor: pointer; }
+    .layer-opt:hover { background: var(--soft); }
+    .layer-opt.active { background: var(--primary-soft); border-color: #bcdadf; }
+    .layer-opt input { margin: 4px 0 0; accent-color: var(--primary); }
+    .layer-opt b { font-weight: 600; font-size: 14px; }
+    .layer-opt small { grid-column: 2; color: var(--muted); font-size: 12px; line-height: 1.4; }
+    .layer-foot { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; }
+    .layer-foot input[type=range] { flex: 1; accent-color: var(--primary); }
+
+    /* ---------- สัญลักษณ์ (ซ้ายล่าง) ---------- */
+    #legend { position: absolute; left: var(--gap); bottom: calc(var(--bar-real, var(--bar-h)) + 2 * var(--gap) + 24px); z-index: 1000; padding: 12px 14px; max-width: 270px; font-size: 12.5px; line-height: 1.5; }
+    #legend h4 { margin: 0 0 6px; font: 600 13.5px/1.3 var(--display); }
+    #legend .row { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+    #legend .sw { width: 14px; height: 14px; border-radius: 4px; flex: none; border: 1px solid rgba(0,0,0,.15); }
+    #legend .grad { height: 10px; border-radius: 6px; margin: 6px 0 2px; border: 1px solid rgba(0,0,0,.1); }
+    #legend .ends { display: flex; justify-content: space-between; color: var(--muted); }
+    #legend small { display: block; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+
+    /* ---------- แถบล่าง ---------- */
+    #bar { position: absolute; left: var(--gap); right: var(--gap); bottom: var(--gap); z-index: 1100; min-height: var(--bar-h); padding: 8px 10px 8px 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    body.panel-open #bar { right: calc(var(--panel-w) + 2 * var(--gap)); }
+    .brand { display: flex; align-items: center; gap: 10px; padding-right: 6px; margin-right: 2px; border-right: 1px solid var(--line); }
+    .brand .dot { width: 26px; height: 26px; border-radius: 8px; background: conic-gradient(from 200deg, #2b83ba, #abdda4, #ffffbf, #fdae61, #d7191c, #2b83ba); box-shadow: inset 0 0 0 3px rgba(255,255,255,.55); }
+    .brand b { display: block; font: 700 15px/1.15 var(--display); }
+    .brand small { color: var(--muted); font-size: 11px; letter-spacing: .02em; }
+    .field { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+    .field select, .field input { height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); font-size: 14px; }
+    .field input { width: 170px; }
+    .seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--soft); border-radius: 11px; }
+    .seg button { border: 0; background: none; padding: 6px 11px; border-radius: 8px; font-size: 13px; white-space: nowrap; color: var(--muted); }
+    .seg button:hover { color: var(--ink); }
+    .seg button.on { background: #fff; color: var(--ink); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+    .quick { display: flex; gap: 4px; }
+    .pill { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 5px 11px; font-size: 13px; }
+    .pill:hover { border-color: var(--primary); color: var(--primary); }
+    .tools { display: flex; gap: 4px; }
+    .ibtn { width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); background: #fff; border-radius: 10px; color: var(--ink); }
+    .ibtn:hover { background: var(--soft); }
+    .ibtn.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+    .spacer { flex: 1; }
+    #status { font-size: 12.5px; color: var(--muted); min-width: 0; flex: 1 1 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .btn-primary { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px; border: 0; border-radius: 10px; background: var(--primary); color: #fff; font-weight: 600; font-size: 14px; }
+    .btn-primary:hover { background: #0b4a57; }
+    .btn-primary.on { background: var(--ink); }
+
+    /* ---------- แผงข้อมูล (ขวาล่าง) ---------- */
+    #panel { position: absolute; right: var(--gap); bottom: var(--gap); z-index: 1101; width: var(--panel-w); height: min(78vh, 720px); display: none; flex-direction: column; overflow: hidden; }
+    body.panel-open #panel { display: flex; }
+    .p-head { padding: 14px 16px 10px; display: flex; gap: 10px; align-items: flex-start; border-bottom: 1px solid var(--line); }
+    .p-head h2 { margin: 0; font: 700 18px/1.3 var(--display); }
+    .p-head p { margin: 2px 0 0; font-size: 12.5px; color: var(--muted); }
+    .p-head .ibtn { margin-left: auto; border: 0; background: none; }
+    .tabs { display: flex; gap: 2px; padding: 8px 12px 0; border-bottom: 1px solid var(--line); }
+    .tabs button { border: 0; background: none; padding: 9px 12px; font-size: 14px; color: var(--muted); border-bottom: 2.5px solid transparent; margin-bottom: -1px; }
+    .tabs button.on { color: var(--ink); font-weight: 600; border-bottom-color: var(--heat); }
+    .p-body { flex: 1; overflow: auto; padding: 14px 16px 18px; }
+    .p-body section + section { margin-top: 16px; }
+    .p-body h3 { margin: 0 0 8px; font: 600 14.5px/1.3 var(--display); }
+    .lead { font-size: 14px; line-height: 1.6; margin: 0 0 4px; }
+    .note { font-size: 12px; color: var(--muted); line-height: 1.5; margin: 8px 0 0; }
+    .empty { padding: 26px 10px; text-align: center; color: var(--muted); font-size: 14px; line-height: 1.6; }
+
+    .hero { display: flex; gap: 14px; align-items: center; padding: 14px; border-radius: 12px; background: var(--soft); }
+    .hero .temp { font: 700 34px/1 var(--display); letter-spacing: -.01em; }
+    .hero .temp small { font-size: 16px; font-weight: 600; }
+    .hero .lvl { display: inline-block; margin-top: 6px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid rgba(0,0,0,.12); }
+    .hero p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+
+    .stack { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: #ece6dc; }
+    .stack span { display: block; height: 100%; }
+    .keys { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: 12.5px; }
+    .keys span { display: inline-flex; align-items: center; gap: 6px; }
+    .keys i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+    .prio-row { display: grid; grid-template-columns: 12px 1fr auto; gap: 4px 10px; align-items: start; padding: 10px 0; border-top: 1px solid var(--line); }
+    .prio-row:first-of-type { border-top: 0; }
+    .prio-row i { width: 12px; height: 12px; border-radius: 4px; margin-top: 4px; }
+    .prio-row b { font-weight: 600; font-size: 14px; }
+    .prio-row .sub { grid-column: 2 / 4; font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+    .prio-row .num { font: 600 14px var(--display); text-align: right; white-space: nowrap; }
+
+    .chart-wrap { position: relative; height: 260px; margin-top: 10px; }
+    .loader { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 34px 10px; color: var(--muted); font-size: 13.5px; text-align: center; }
+    .spin { width: 26px; height: 26px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--heat); animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .skel { height: 14px; border-radius: 7px; background: linear-gradient(90deg, #efe9df 25%, #f8f4ee 50%, #efe9df 75%); background-size: 200% 100%; animation: shimmer 1.2s infinite; margin: 8px 0; }
+    @keyframes shimmer { to { background-position: -200% 0; } }
+
+    /* ---------- คำอธิบาย ---------- */
+    #help { position: fixed; inset: 0; z-index: 1400; display: none; align-items: center; justify-content: center; background: rgba(29,35,39,.38); padding: 20px; }
+    #help.open { display: flex; }
+    #help .card { width: min(640px, 100%); max-height: calc(100vh - 40px); overflow: auto; padding: 22px 26px; position: relative; }
+    #help h2 { margin: 0 0 4px; font: 700 21px/1.3 var(--display); }
+    #help h3 { margin: 18px 0 6px; font: 600 15.5px/1.3 var(--display); }
+    #help p, #help li { font-size: 14px; line-height: 1.65; }
+    #help ul { padding-left: 20px; margin: 6px 0; }
+    #help .ibtn { position: absolute; top: 12px; right: 12px; border: 0; }
+    #help .crit { display: grid; grid-template-columns: 14px 1fr; gap: 8px; align-items: start; margin: 8px 0; font-size: 14px; line-height: 1.55; }
+    #help .crit i { width: 14px; height: 14px; border-radius: 4px; margin-top: 4px; }
+    #help small { color: var(--muted); font-size: 12.5px; line-height: 1.5; display: block; }
+
+    /* ---------- จอเล็ก ---------- */
+    @media (max-width: 860px) {
+      :root { --panel-w: calc(100vw - 2 * var(--gap)); }
+      body.panel-open #bar { right: var(--gap); }
+      #panel { height: 62vh; z-index: 1200; }
+      .brand small, #status { display: none; }
+      .field input { width: 130px; }
+      #legend { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="map" aria-label="แผนที่"></div>
+  <div id="progress"></div>
+  <div id="zoomHint" class="chip" hidden>
+    <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5M11 8v6M8 11h6"/></svg>
+    <span>ซูมเข้าอีกนิดเพื่อดูชั้นข้อมูลนี้</span>
+  </div>
+
+  <!-- ชั้นข้อมูล (ขวาบน) -->
+  <div id="layers" class="card collapsed">
+    <button id="layerToggle" aria-expanded="false" title="ชั้นข้อมูล">
+      <svg class="icon" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></svg>
+      <span class="label">ชั้นข้อมูล</span>
+      <svg class="icon chev" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></svg>
+    </button>
+    <div class="layer-body">
+      <div id="layerList" role="radiogroup" aria-label="เลือกชั้นข้อมูล"></div>
+      <div class="layer-foot">
+        <span>ความทึบ</span>
+        <input id="opacity" type="range" min="0.2" max="1" step="0.05" value="0.8" aria-label="ความทึบของชั้นข้อมูล">
+      </div>
+      <div class="layer-foot">
+        <span>แผนที่ฐาน</span>
+        <div class="seg" id="baseSeg">
+          <button data-base="gray" class="on">สีเทา</button>
+          <button data-base="osm">ถนน</button>
+          <button data-base="sat">ดาวเทียม</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="legend" class="card"></div>
+
+  <!-- แถบล่าง -->
+  <div id="bar" class="card">
+    <div class="brand">
+      <span class="dot"></span>
+      <div><b>แผนที่ความร้อนเมือง</b><small>Urban Heat Explorer</small></div>
+    </div>
+    <label class="field">ปี <select id="year" aria-label="ปี"></select></label>
+    <div class="seg" id="seasonSeg" role="group" aria-label="ฤดู">
+      <button data-season="all" class="on">ทั้งปี</button>
+      <button data-season="dry">หน้าแล้ง</button>
+      <button data-season="wet">หน้าฝน</button>
+    </div>
+    <label class="field">
+      <input id="province" list="provList" placeholder="ค้นหาจังหวัด…" aria-label="ค้นหาจังหวัด" autocomplete="off">
+      <datalist id="provList"></datalist>
+    </label>
+    <div class="quick">
+      <button class="pill" data-quick="bangkok|krung thep">กรุงเทพฯ</button>
+      <button class="pill" data-quick="khon kaen">ขอนแก่น</button>
+    </div>
+    <div class="tools">
+      <button class="ibtn" id="btnPoly" title="วาดพื้นที่ (คลิกวางจุด ดับเบิลคลิกเพื่อจบ)" aria-label="วาดพื้นที่">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M5 7 12 3l7 5-2 10H7Z"/><circle cx="5" cy="7" r="1.6"/><circle cx="12" cy="3" r="1.6"/><circle cx="19" cy="8" r="1.6"/><circle cx="17" cy="18" r="1.6"/><circle cx="7" cy="18" r="1.6"/></svg>
+      </button>
+      <button class="ibtn" id="btnRect" title="วาดสี่เหลี่ยม (กดค้างแล้วลาก)" aria-label="วาดสี่เหลี่ยม">
+        <svg class="icon" viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="1.5" stroke-dasharray="3 2.5"/></svg>
+      </button>
+      <button class="ibtn" id="btnClear" title="ล้างพื้นที่ที่เลือก" aria-label="ล้าง">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>
+      </button>
+    </div>
+    <span id="status"></span>
+    <button class="ibtn" id="btnHelp" title="อ่านแผนที่ยังไง" aria-label="คำอธิบาย">
+      <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5V14M12 17.5v.01"/></svg>
+    </button>
+    <button class="btn-primary" id="btnPanel" aria-label="เปิดหรือปิดแผงข้อมูล">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+      <span>ข้อมูล</span>
+    </button>
+  </div>
+
+  <!-- แผงข้อมูล (ขวาล่าง) -->
+  <aside id="panel" class="card" aria-label="ข้อมูลพื้นที่">
+    <div class="p-head">
+      <div>
+        <h2 id="pTitle">ยังไม่ได้เลือกพื้นที่</h2>
+        <p id="pSub">คลิกแผนที่ วาดพื้นที่ หรือเลือกจังหวัด</p>
+      </div>
+      <button class="ibtn" id="btnPanelClose" aria-label="ปิดแผงข้อมูล">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button data-tab="overview" class="on" role="tab">ภาพรวม</button>
+      <button data-tab="year" role="tab">ปีที่เลือก</button>
+      <button data-tab="history" role="tab">ย้อนหลัง 20 ปี</button>
+    </nav>
+    <div class="p-body">
+      <div id="tab-overview"></div>
+      <div id="tab-year" hidden>
+        <div class="seg" id="yearSeg">
+          <button data-view="green" class="on">แยกตามพื้นที่สีเขียว</button>
+          <button data-view="built">แยกตามสิ่งปลูกสร้าง</button>
+        </div>
+        <div id="yearOut"></div>
+        <div class="chart-wrap" id="yearChartWrap" hidden><canvas id="yearChart"></canvas></div>
+        <p class="note" id="yearNote" hidden></p>
+      </div>
+      <div id="tab-history" hidden>
+        <div class="seg" id="histSeg">
+          <button data-view="trend" class="on">แนวโน้มรวม</button>
+          <button data-view="change">แยกตามระดับที่สิ่งปลูกสร้างเพิ่ม</button>
+        </div>
+        <div id="histOut"></div>
+        <div class="chart-wrap" id="histChartWrap" hidden><canvas id="histChart"></canvas></div>
+        <p class="note" id="histNote" hidden></p>
+      </div>
+    </div>
+  </aside>
+
+  <!-- คำอธิบาย -->
+  <div id="help" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+    <div class="card">
+      <button class="ibtn" id="helpClose" aria-label="ปิด">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+      <h2 id="helpTitle">แผนที่นี้บอกอะไร</h2>
+      <p>เมืองที่มีอาคาร ถนน และลานคอนกรีตมาก จะดูดและเก็บความร้อนจากแดดไว้ ขณะที่ต้นไม้ให้ร่มเงาและคายน้ำช่วยลดความร้อน ความร้อนที่สูงขึ้นเป็นอันตรายต่อผู้คน โดยเฉพาะเด็ก ผู้สูงอายุ และคนทำงานกลางแจ้ง แผนที่นี้ช่วยหา<b>ย่านที่ควรปรับปรุงก่อน</b> และดูว่ามี<b>ที่โล่ง</b>ที่อาจทำเป็นพื้นที่สีเขียวได้หรือไม่</p>
+
+      <h3>ย่านที่ควรปรับปรุง (ช่องละประมาณ 1 × 1 กม.)</h3>
+      <div id="helpCrit"></div>
+
+      <h3>คำศัพท์</h3>
+      <ul>
+        <li><b>อุณหภูมิพื้นผิวช่วงบ่าย (12–14 น.)</b> คือความร้อนของ "ผิว" เช่น หลังคา ถนน ดิน ใบไม้ ที่ดาวเทียมวัดได้ มักสูงกว่าอุณหภูมิอากาศในพยากรณ์อากาศ ใช้เฉพาะวันที่ท้องฟ้าโปร่ง</li>
+        <li><b>ระดับสีอุณหภูมิ</b> แบ่งเพื่อให้เห็นภาพเท่านั้น ไม่ใช่เกณฑ์ทางการ และไม่ใช่ "ดัชนีความร้อน" ที่คิดจากอุณหภูมิอากาศกับความชื้น</li>
+        <li><b>สิ่งปลูกสร้างและถนน</b> รวมอาคาร ถนน และลานคอนกรีต</li>
+        <li><b>พื้นที่สีเขียว</b> คือต้นไม้ หญ้า พุ่มไม้ และสวน</li>
+        <li><b>ที่โล่ง</b> คือหญ้า พุ่มไม้ และดินเปล่าในย่านที่มีคนอยู่ ไม่นับนาและไร่</li>
+        <li><b>หน้าแล้ง</b> พ.ย.–เม.ย. · <b>หน้าฝน</b> พ.ค.–ต.ค. (หน้าฝนมีเมฆมาก ข้อมูลอาจน้อย)</li>
+      </ul>
+
+      <h3>ข้อควรรู้</h3>
+      <ul>
+        <li>"ที่โล่ง" เป็นแค่<b>จุดที่น่าตรวจสอบ</b> ดาวเทียมบอกไม่ได้ว่าเป็นที่ของใคร หรือมีแผนก่อสร้างหรือยัง ต้องตรวจกับผังเมืองหรือที่ดินของรัฐก่อนเสนอ</li>
+        <li>ตัวเลขที่เทียบกันเป็น<b>ความสัมพันธ์</b>จากข้อมูล ไม่ได้พิสูจน์สาเหตุ และไม่ใช่คำทำนายว่าปลูกต้นไม้แล้วจะเย็นลงเท่านั้นพอดี</li>
+        <li>สัดส่วนพื้นผิวคำนวณจากค่าความน่าจะเป็นของแบบจำลอง เป็นค่าประมาณ ลานโล่งในเมืองบางส่วนถูกนับเป็นสิ่งปลูกสร้าง</li>
+        <li>ประชากรเป็นค่าประมาณที่กระจายจากสำมะโนตามพื้นที่อาคาร เหมาะดูภาพรวมระดับย่าน และเป็นการสัมผัสความร้อน ไม่ใช่จำนวนผู้ป่วย</li>
+      </ul>
+
+      <h3>แหล่งข้อมูล</h3>
+      <ul>
+        <li>อุณหภูมิพื้นผิว: NASA MODIS Aqua (MYD11A1) ปี 2003–2022 และ VIIRS (VNP21A1D) ปี 2023 เป็นต้นไป</li>
+        <li>พื้นผิว: Dynamic World V1 ปี 2016 เป็นต้นไป (This dataset is produced for the Dynamic World Project by Google in partnership with National Geographic Society and the World Resources Institute.)</li>
+        <li>สิ่งปลูกสร้างย้อนหลังและประชากร: GHSL, European Commission JRC</li>
+        <li>ขอบเขตจังหวัด: FAO GAUL 2015 (ใช้เพื่อการศึกษา ไม่ใช่เชิงพาณิชย์)</li>
+      </ul>
+      <small id="coverage"></small>
+    </div>
+  </div>
+
+<script>
+// =============================================================== ค่าเริ่มต้น
+// workaround บั๊กของ Leaflet.draw 1.0.4 (ReferenceError: type is not defined)
+window.type = '';
+
+let cfg = {
+  first_year: 2003, last_year: 2025, default_year: 2022, aqua_last_year: 2022, dw_first_year: 2016,
+  lst_breaks: [30, 34, 38, 42],
+  lst_palette: ['#2b83ba', '#abdda4', '#ffffbf', '#fdae61', '#d7191c'],
+  hot: 34, very_hot: 38, hot_level: 3, pop_any: 300, pop_dense: 1500,
+  green_low: 0.15, open_min: 0.05,
+  prio_colors: ['#f2c14e', '#f08a24', '#d1352b'],
+  seasons: { all: 'ทั้งปี', dry: 'หน้าแล้ง (พ.ย.–เม.ย.)', wet: 'หน้าฝน (พ.ค.–ต.ค.)' },
+  point_radius_m: 2000
+};
+
+const LEVEL_NAMES = ['เย็น', 'อุ่น', 'ร้อน', 'ร้อนมาก', 'ร้อนจัด'];
+const COVER = [
+  ['BUILT', 'สิ่งปลูกสร้างและถนน', '#7a6fb0'],
+  ['TREES', 'ต้นไม้', '#2f7d4a'],
+  ['GRASS', 'หญ้าและพุ่มไม้', '#9cc56b'],
+  ['BARE', 'ดินเปล่า', '#c8a77e'],
+  ['CROPS', 'นาและไร่', '#e8c766'],
+  ['WATER', 'แหล่งน้ำ', '#5b9bd1']
+];
+const CHANGE_COLORS = ['#b8bec2', '#f1b6da', '#de77ae', '#c51b7d', '#7a6fb0'];
+const CHANGE_SHORT = [['ไม่มีอาคาร', '(กลุ่มเทียบ)'], ['เพิ่มเล็กน้อย', '(2–10 จุด)'], ['เพิ่มปานกลาง', '(10–25 จุด)'],
+                      ['เพิ่มมาก', '(เกิน 25 จุด)'], ['เมืองเดิม', '(หนาแน่นอยู่แล้ว)']];
+
+const LAYERS = {
+  priority: { name: 'ย่านที่ควรปรับปรุง', desc: 'ร้อนมาก + คนหนาแน่น + เขียวน้อย', minZoom: 8, season: true },
+  lst: { name: 'อุณหภูมิพื้นผิวช่วงบ่าย', desc: '12–14 น. · ช่องละ 1 กม.', minZoom: 5, season: true },
+  green: { name: 'พื้นที่สีเขียว', desc: 'ต้นไม้ หญ้า สวน · ละเอียด 10 ม.', minZoom: 9 },
+  open: { name: 'ที่โล่งในย่านที่มีคนอยู่', desc: 'หญ้าและดินเปล่าที่อาจทำเป็นพื้นที่สีเขียว', minZoom: 10 },
+  built: { name: 'สิ่งปลูกสร้างและถนน', desc: 'อาคาร ถนน ลานคอนกรีต · ละเอียด 10 ม.', minZoom: 9 },
+  built_change: { name: 'สิ่งปลูกสร้างที่เพิ่มขึ้น', desc: 'ปี 2005 → 2020', minZoom: 6 }
+};
+
+const state = {
+  year: 2022, season: 'all', layer: 'priority', opacity: 0.8,
+  tab: 'overview', yearView: 'green', histView: 'trend', focus: null
+};
+
+const $ = id => document.getElementById(id);
+const nf = n => Math.round(n).toLocaleString('th-TH');
+const f1 = x => x.toFixed(1);
+const levelOf = v => cfg.lst_breaks.reduce((l, b) => l + (v > b ? 1 : 0), 0);
+const seasonShort = () => ({ all: 'ทั้งปี', dry: 'หน้าแล้ง', wet: 'หน้าฝน' })[state.season];
+
+Chart.defaults.font.family = "'IBM Plex Sans Thai', system-ui, sans-serif";
+Chart.defaults.color = '#4b5459';
+Chart.defaults.borderColor = '#ece6dc';
+
+// =============================================================== แผนที่
+const map = L.map('map', { zoomControl: true, attributionControl: true }).setView([13.7563, 100.5018], 10);
+map.attributionControl.setPosition('bottomleft');
+
+// แผนที่ฐาน (ไม่ต้องใช้ API key) — ชื่อสถานที่วางไว้ชั้นบนสุด ไม่โดนชั้นข้อมูลทับ
+map.createPane('labels');
+map.getPane('labels').style.zIndex = 650;
+map.getPane('labels').style.pointerEvents = 'none';
+const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
+const bases = {
+  gray: L.layerGroup([
+    L.tileLayer(ESRI + 'Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', { attribution: 'Basemap © Esri', maxZoom: 16 }),
+    L.tileLayer(ESRI + 'Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}', { pane: 'labels', maxZoom: 16 })
+  ]),
+  osm: L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 19 }),
+  sat: L.tileLayer(ESRI + 'World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Imagery © Esri', maxZoom: 19 })
+};
+let baseKey = 'gray';
+let baseErrors = 0;
+function setBase(key) {
+  Object.values(bases).forEach(l => map.removeLayer(l));
+  bases[key].addTo(map);
+  baseKey = key;
+  document.querySelectorAll('#baseSeg button').forEach(b => b.classList.toggle('on', b.dataset.base === key));
+}
+// ถ้าแผนที่ฐานสีเทาโหลดไม่ได้ เปลี่ยนเป็น OpenStreetMap ให้อัตโนมัติ
+bases.gray.eachLayer(l => l.on('tileerror', () => {
+  if (baseKey === 'gray' && ++baseErrors >= 4) setBase('osm');
+}));
+setBase('gray');
+
+// ปุ่มตำแหน่งของฉัน (ใต้ปุ่ม +/−)
+const LocateControl = L.Control.extend({
+  options: { position: 'topleft' },
+  onAdd() {
+    const box = L.DomUtil.create('div', 'leaflet-bar');
+    const a = L.DomUtil.create('a', '', box);
+    a.href = '#';
+    a.title = 'ตำแหน่งของฉัน';
+    a.setAttribute('role', 'button');
+    a.setAttribute('aria-label', 'ไปยังตำแหน่งของฉัน');
+    a.innerHTML = '<svg class="icon" viewBox="0 0 24 24"><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="1.5"/></svg>';
+    L.DomEvent.disableClickPropagation(box);
+    L.DomEvent.on(a, 'click', e => { L.DomEvent.preventDefault(e); map.locate({ setView: true, maxZoom: 13 }); });
+    return box;
+  }
+});
+map.addControl(new LocateControl());
+map.on('locationerror', () => setStatus('ระบุตำแหน่งไม่ได้ (ตรวจสิทธิ์ตำแหน่งในเบราว์เซอร์)'));
+
+function setStatus(t) { $('status').textContent = t; $('status').title = t; }
+
+// เรียก API แล้วแปลงปัญหาให้เป็นข้อความที่บอกสาเหตุ
+const NET_MSG = 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ตรวจว่าหน้าต่าง cmd ที่รัน python app.py ยังเปิดอยู่';
+async function api(url, opts) {
+  let r;
+  try { r = await fetch(url, opts); }
+  catch (e) { throw new Error(NET_MSG); }
+  let d;
+  try { d = await r.json(); }
+  catch (e) { throw new Error(`เซิร์ฟเวอร์ตอบกลับผิดรูปแบบ (รหัส ${r.status}) ดูข้อความ error ในหน้าต่าง cmd`); }
+  if (!r.ok) throw new Error(d.error || `ผิดพลาด (รหัส ${r.status})`);
+  return d;
+}
+
+// ---------- ชั้นข้อมูล ----------
+const tileCache = {};
+let overlay = null;
+let overlayReq = 0;
+
+function layerKey() {
+  const def = LAYERS[state.layer];
+  if (state.layer === 'built_change') return 'built_change';
+  return [state.layer, state.year, def.season ? state.season : ''].join('|');
+}
+
+function buildLayerList() {
+  const box = $('layerList');
+  box.innerHTML = '';
+  Object.entries(LAYERS).forEach(([key, def]) => {
+    const lab = document.createElement('label');
+    lab.className = 'layer-opt' + (key === state.layer ? ' active' : '');
+    lab.innerHTML = `<input type="radio" name="layer" value="${key}" ${key === state.layer ? 'checked' : ''}>` +
+      `<b>${def.name}</b><small>${def.desc}</small>`;
+    lab.querySelector('input').addEventListener('change', () => {
+      state.layer = key;
+      box.querySelectorAll('.layer-opt').forEach(el => el.classList.toggle('active', el === lab));
+      loadOverlay();
+    });
+    box.appendChild(lab);
+  });
+}
+
+function progress(on) {
+  const p = $('progress');
+  if (on) { p.className = ''; void p.offsetWidth; p.className = 'on'; }
+  else { p.className = 'done'; }
+}
+
+function updateZoomHint() {
+  const need = LAYERS[state.layer].minZoom;
+  $('zoomHint').hidden = map.getZoom() >= need;
+}
+map.on('zoomend', updateZoomHint);
+
+function dataNote(d) {
+  const parts = [];
+  if (d.source) parts.push(`อุณหภูมิ ${d.source} ปี ${d.year} (${seasonShort()})`);
+  if (d.dw_year) parts.push(`พื้นผิว Dynamic World ${d.dw_year}`);
+  if (d.pop_epoch) parts.push(`ประชากร GHSL ${d.pop_epoch}`);
+  return parts.join(' · ');
+}
+
+async function loadOverlay() {
+  const key = layerKey();
+  const req = ++overlayReq;
+  renderLegend();
+  updateZoomHint();
+  if (overlay) { map.removeLayer(overlay); overlay = null; }
+  setStatus('กำลังเตรียมชั้นข้อมูล…');
+  progress(true);
+  try {
+    let d = tileCache[key];
+    if (!d) {
+      const q = new URLSearchParams({ layer: state.layer, year: state.year, season: state.season });
+      d = await api('/api/tiles?' + q);
+      if (!d.url) throw new Error('เซิร์ฟเวอร์ยังเป็น app.py เวอร์ชันเก่า ให้แทนที่ไฟล์แล้วรัน python app.py ใหม่');
+      tileCache[key] = d;
+    }
+    if (req !== overlayReq) return;
+    overlay = L.tileLayer(d.url, { opacity: state.opacity, minZoom: LAYERS[state.layer].minZoom, maxZoom: 19 });
+    let pending = 0;
+    overlay.on('loading', () => progress(true));
+    overlay.on('load', () => progress(false));
+    overlay.on('tileerror', () => {
+      if (pending++ === 0) setStatus('บางส่วนของแผนที่คำนวณไม่ทัน ลองซูมเข้าหรือรอสักครู่');
+    });
+    overlay.addTo(map);
+    if (map.getZoom() < LAYERS[state.layer].minZoom) progress(false);
+    let note = dataNote(d);
+    if (d.dw_year && state.year < cfg.dw_first_year) note += ` (ก่อนปี ${cfg.dw_first_year} ใช้ข้อมูลพื้นผิวปีแรกที่มี)`;
+    setStatus(note || LAYERS[state.layer].name);
+  } catch (err) {
+    if (req !== overlayReq) return;
+    progress(false);
+    setStatus(errMsg(err));
+  }
+}
+
+$('opacity').addEventListener('input', e => {
+  state.opacity = +e.target.value;
+  if (overlay) overlay.setOpacity(state.opacity);
+});
+
+document.querySelectorAll('#baseSeg button').forEach(btn => btn.addEventListener('click', () => setBase(btn.dataset.base)));
+
+$('layerToggle').addEventListener('click', () => {
+  const el = $('layers');
+  el.classList.toggle('collapsed');
+  $('layerToggle').setAttribute('aria-expanded', String(!el.classList.contains('collapsed')));
+});
+L.DomEvent.disableClickPropagation($('layers'));
+L.DomEvent.disableScrollPropagation($('layers'));
+
+// ---------- สัญลักษณ์ ----------
+function lstRows() {
+  const b = cfg.lst_breaks;
+  const t = [`ต่ำกว่า ${b[0]} °C`, ...b.slice(0, -1).map((v, i) => `${v}–${b[i + 1]} °C`), `${b[b.length - 1]} °C ขึ้นไป`];
+  return t.map((x, i) => `<div class="row"><span class="sw" style="background:${cfg.lst_palette[i]}"></span>${x} · ${LEVEL_NAMES[i]}</div>`).join('');
+}
+
+function gradient(colors, left, right) {
+  return `<div class="grad" style="background:linear-gradient(90deg,${colors.join(',')})"></div><div class="ends"><span>${left}</span><span>${right}</span></div>`;
+}
+
+function renderLegend() {
+  const c = cfg.prio_colors;
+  const html = {
+    priority: `<h4>ย่านที่ควรปรับปรุง</h4>
+      <div class="row"><span class="sw" style="background:${c[2]}"></span>เร่งด่วน · มีที่โล่งทำพื้นที่สีเขียวได้</div>
+      <div class="row"><span class="sw" style="background:${c[1]}"></span>เร่งด่วน · ไม่มีที่โล่ง ต้องใช้วิธีอื่น</div>
+      <div class="row"><span class="sw" style="background:${c[0]}"></span>เฝ้าระวัง · ร้อนและมีคนอยู่</div>
+      <small>เร่งด่วน = ช่วงบ่ายเกิน ${cfg.very_hot} °C, คนอยู่ ${nf(cfg.pop_dense)} คน/ตร.กม. ขึ้นไป, พื้นที่สีเขียวไม่ถึง ${Math.round(cfg.green_low * 100)}%</small>`,
+    lst: `<h4>อุณหภูมิพื้นผิวช่วงบ่าย (12–14 น.)</h4>${lstRows()}<small>ระดับสีเพื่อให้เห็นภาพ ไม่ใช่เกณฑ์ทางการ</small>`,
+    green: `<h4>พื้นที่สีเขียว</h4>${gradient(['#d9f0a3', '#78c679', '#238443', '#004529'], 'เขียวบางส่วน', 'เขียวเต็มพื้นที่')}`,
+    open: `<h4>ที่โล่งในย่านที่มีคนอยู่</h4>${gradient(['#f3d27a', '#b5651d'], 'หญ้า/ดินเปล่าบางส่วน', 'โล่งทั้งหมด')}<small>เป็นจุดที่น่าตรวจสอบ ไม่ได้บอกว่าเป็นที่ว่างที่ใช้ได้จริง</small>`,
+    built: `<h4>สิ่งปลูกสร้างและถนน</h4>${gradient(['#dadaeb', '#9e9ac8', '#6a51a3', '#3f007d'], 'บางส่วน', 'หนาแน่น')}`,
+    built_change: `<h4>สิ่งปลูกสร้างที่เพิ่มขึ้น 2005 → 2020</h4>${gradient(['#fde0ef', '#f1b6da', '#de77ae', '#c51b7d', '#8e0152'], '+2 จุด', '+40 จุดขึ้นไป')}<small>จุดเปอร์เซ็นต์ของพื้นที่อาคารต่อเซลล์ 100 ม.</small>`
+  };
+  $('legend').innerHTML = html[state.layer];
+}
+
+// =============================================================== แผงข้อมูล
+let focusLayer = null;
+let seq = 0;
+let cache = {};
+const charts = { year: null, history: null };
+
+function setPanel(open) {
+  document.body.classList.toggle('panel-open', open);
+  $('btnPanel').classList.toggle('on', open);
+  if (open) setTimeout(() => Object.values(charts).forEach(c => c && c.resize()), 0);
+}
+
+function setFocusLayer(layer) {
+  if (focusLayer) focusLayer.remove();
+  focusLayer = layer;
+}
+
+function newFocus(payload, title) {
+  seq++;
+  cache = {};
+  state.focus = { payload, title };
+  $('pTitle').textContent = title;
+  setPanel(true);
+  refreshPanel();
+}
+
+function updateSub() {
+  $('pSub').textContent = state.focus
+    ? `ปี ${state.year} · ${cfg.seasons[state.season]}`
+    : 'คลิกแผนที่ วาดพื้นที่ หรือเลือกจังหวัด';
+}
+
+function loading(el, text) {
+  el.innerHTML = `<div class="loader"><div class="spin"></div><div class="lt">${text}</div></div>`;
+  const t0 = Date.now();
+  const lt = el.querySelector('.lt');
+  const timer = setInterval(() => {
+    const s = Math.round((Date.now() - t0) / 1000);
+    if (lt.isConnected) lt.textContent = `${text} · ${s} วินาที`; else clearInterval(timer);
+  }, 1000);
+  return () => clearInterval(timer);
+}
+
+async function getData(name, url, body) {
+  const key = `${name}|${JSON.stringify(body)}`;
+  if (cache[key]) return cache[key];
+  const d = await api(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  cache[key] = d;
+  return d;
+}
+
+function errMsg(err) {
+  const m = (err && err.message) || String(err);
+  return /[฀-๿]/.test(m) ? m : 'ผิดพลาด: ' + m;
+}
+
+function refreshPanel() {
+  updateSub();
+  ['overview', 'year', 'history'].forEach(t => { $('tab-' + t).hidden = t !== state.tab; });
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === state.tab));
+  if (!state.focus) {
+    $('tab-overview').innerHTML = `<div class="empty">เลือกพื้นที่เพื่อดูว่าย่านไหนร้อน มีคนอยู่เท่าไหร่<br>และมีที่โล่งพอจะเพิ่มพื้นที่สีเขียวหรือไม่<br><br>
+      คลิกจุดบนแผนที่ (วิเคราะห์รัศมี ${cfg.point_radius_m / 1000} กม.) วาดพื้นที่ หรือเลือกจังหวัด</div>`;
+    ['yearOut', 'histOut'].forEach(id => { $(id).innerHTML = '<div class="empty">ยังไม่ได้เลือกพื้นที่</div>'; });
+    ['yearChartWrap', 'histChartWrap', 'yearNote', 'histNote'].forEach(id => { $(id).hidden = true; });
+    return;
+  }
+  if (state.tab === 'overview') loadOverview();
+  else if (state.tab === 'year') loadYear();
+  else loadHistory();
+}
+
+// ---------- แท็บ: ภาพรวม ----------
+async function loadOverview() {
+  const my = seq, el = $('tab-overview');
+  const stop = loading(el, 'กำลังคำนวณภาพรวมของพื้นที่');
+  el.insertAdjacentHTML('beforeend', '<div class="skel" style="width:70%"></div><div class="skel"></div><div class="skel" style="width:85%"></div>');
+  try {
+    const d = await getData('summary', '/api/summary', { ...state.focus.payload, year: state.year, season: state.season });
+    if (my !== seq || state.tab !== 'overview' || !sameYS(d)) return;
+    el.innerHTML = renderOverview(d);
+  } catch (err) {
+    if (my === seq && state.tab === 'overview') el.innerHTML = `<div class="empty">${errMsg(err)}</div>`;
+  } finally { stop(); }
+}
+
+function sameYS(d) { return d.year === undefined || (d.year === state.year && d.season === state.season); }
+
+function coverOf(d) {
+  const lived = d.cover_lived || {};
+  const ok = COVER.some(([k]) => lived[k] != null);
+  return ok ? { c: lived, scope: 'ในย่านที่มีคนอยู่' } : { c: d.cover_all || {}, scope: 'ทั้งพื้นที่ที่เลือก' };
+}
+
+function renderOverview(d) {
+  const pc = cfg.prio_colors;
+  let html = '';
+
+  // อุณหภูมิในย่านที่มีคนอยู่
+  if (d.lst_lived != null) {
+    const lv = levelOf(d.lst_lived);
+    const fg = lv === 0 || lv === 4 ? '#fff' : '#1d2327';
+    html += `<section class="hero"><div><div class="temp">${f1(d.lst_lived)}<small> °C</small></div>
+      <span class="lvl" style="background:${cfg.lst_palette[lv]};color:${fg}">${LEVEL_NAMES[lv]}</span></div>
+      <p>อุณหภูมิพื้นผิวช่วงบ่ายเฉลี่ย<br>ในย่านที่มีคนอยู่ (${seasonShort()} ปี ${d.year})</p></section>`;
+  } else {
+    html += `<section class="hero"><p>ไม่มีข้อมูลอุณหภูมิในย่านที่มีคนอยู่ อาจเพราะเมฆบังทั้งช่วง หรือพื้นที่นี้แทบไม่มีคนอาศัย${state.season === 'wet' ? ' (หน้าฝนมีเมฆมาก ลองเลือกทั้งปีหรือหน้าแล้ง)' : ''}</p></section>`;
+  }
+
+  // ความเร่งด่วน
+  const p = d.prio;
+  const urgentArea = p[2].area_km2 + p[3].area_km2;
+  const urgentPeople = p[2].people + p[3].people;
+  let lead;
+  if (urgentArea >= 0.5) {
+    lead = `พบย่านเร่งด่วนประมาณ <b>${nf(urgentArea)} ตร.กม.</b> มีคนอาศัยราว <b>${nf(urgentPeople)} คน</b>`;
+    if (p[3].area_km2 >= 0.5) lead += ` ในนี้ ${nf(p[3].area_km2)} ตร.กม. ยังมีที่โล่งรวมราว <b>${p[3].open_km2.toFixed(1)} ตร.กม.</b> ที่อาจเริ่มทำเป็นพื้นที่สีเขียวได้ก่อน`;
+    if (p[2].area_km2 >= 0.5) lead += ` ส่วนอีก ${nf(p[2].area_km2)} ตร.กม. แทบไม่มีที่โล่ง ต้องใช้วิธีอื่น เช่น ต้นไม้ริมถนน หลังคาเขียว หรือหลังคาสีอ่อน`;
+  } else if (p[1].area_km2 >= 0.5) {
+    lead = `ยังไม่พบย่านที่เข้าเกณฑ์เร่งด่วน แต่มี <b>${nf(p[1].area_km2)} ตร.กม.</b> ที่ร้อนและมีคนอยู่ ควรเฝ้าระวัง (ราว ${nf(p[1].people)} คน)`;
+  } else {
+    lead = 'ไม่พบย่านที่เข้าเกณฑ์ในปีและฤดูนี้';
+  }
+  const row = (color, title, sub, num) =>
+    `<div class="prio-row"><i style="background:${color}"></i><b>${title}</b><span class="num">${num}</span><span class="sub">${sub}</span></div>`;
+  html += `<section><h3>ย่านที่ควรปรับปรุง</h3><p class="lead">${lead}</p>
+    ${row(pc[2], 'เร่งด่วน · มีที่โล่ง', `${nf(p[3].people)} คน · ที่โล่งรวม ${p[3].open_km2.toFixed(1)} ตร.กม.`, `${nf(p[3].area_km2)} ตร.กม.`)}
+    ${row(pc[1], 'เร่งด่วน · ไม่มีที่โล่ง', `${nf(p[2].people)} คน`, `${nf(p[2].area_km2)} ตร.กม.`)}
+    ${row(pc[0], 'เฝ้าระวัง', `${nf(p[1].people)} คน`, `${nf(p[1].area_km2)} ตร.กม.`)}
+  </section>`;
+
+  // พื้นผิว
+  const { c, scope } = coverOf(d);
+  const tot = COVER.reduce((a, [k]) => a + (c[k] || 0), 0);
+  if (tot > 0) {
+    const segs = COVER.map(([k, n, col]) => `<span style="width:${((c[k] || 0) / tot * 100).toFixed(2)}%;background:${col}" title="${n}"></span>`).join('');
+    const keys = COVER.map(([k, n, col]) => `<span><i style="background:${col}"></i>${n} ${Math.round((c[k] || 0) / tot * 100)}%</span>`).join('');
+    const green = ((c.TREES || 0) + (c.GRASS || 0)) / tot * 100;
+    html += `<section><h3>พื้นผิว${scope}</h3><div class="stack">${segs}</div><div class="keys">${keys}</div>
+      <p class="note">พื้นที่สีเขียว (ต้นไม้ + หญ้า) รวม ${Math.round(green)}% · ข้อมูล Dynamic World ปี ${d.dw_year}</p></section>`;
+  }
+
+  // คนกับความร้อน
+  const classified = d.expo.reduce((a, r) => a + r.people, 0);
+  if (classified >= 1) {
+    const hot = d.expo.filter(r => r.level >= cfg.hot_level).reduce((a, r) => a + r.people, 0);
+    const segs = d.expo.map(r => `<span style="width:${(r.people / classified * 100).toFixed(2)}%;background:${cfg.lst_palette[r.level]}" title="${LEVEL_NAMES[r.level]}: ${nf(r.people)} คน"></span>`).join('');
+    const keys = d.expo.filter(r => r.people >= 1).map(r => `<span><i style="background:${cfg.lst_palette[r.level]}"></i>${LEVEL_NAMES[r.level]} ${Math.round(r.people / classified * 100)}%</span>`).join('');
+    html += `<section><h3>ผู้คนกับความร้อน</h3>
+      <p class="lead">ประชากรราว ${nf(d.pop_total)} คน ในจำนวนนี้ <b>${nf(hot)} คน (${Math.round(hot / classified * 100)}%)</b> อาศัยในย่านที่ช่วงบ่ายร้อนมากขึ้นไป (เกิน ${cfg.very_hot} °C)</p>
+      <div class="stack">${segs}</div><div class="keys">${keys}</div>
+      <p class="note">ประชากรจาก GHSL ปี ${d.pop_epoch} เป็นค่าประมาณ · เป็นการสัมผัสความร้อน ไม่ใช่จำนวนผู้ป่วย</p></section>`;
+  }
+
+  html += `<p class="note">อุณหภูมิจากดาวเทียม ${d.source} เฉพาะวันที่ท้องฟ้าโปร่ง · พื้นที่ที่เลือกราว ${nf(d.area_km2)} ตร.กม.</p>`;
+  return html;
+}
+
+// ---------- แท็บ: ปีที่เลือก ----------
+function drawChart(name, canvasId, config) {
+  if (charts[name]) charts[name].destroy();
+  charts[name] = new Chart($(canvasId), config);
+}
+
+function barOptions(yTitle, xTitle, yMin, tipExtra) {
+  return {
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { afterLabel: tipExtra } }
+    },
+    scales: {
+      y: { min: yMin, title: { display: true, text: yTitle }, grid: { color: '#efe9e0' } },
+      x: { title: { display: !!xTitle, text: xTitle }, grid: { display: false } }
+    }
+  };
+}
+
+async function loadYear() {
+  const my = seq;
+  $('yearChartWrap').hidden = true;
+  $('yearNote').hidden = true;
+  const stop = loading($('yearOut'), 'กำลังเทียบอุณหภูมิในแต่ละกลุ่ม');
+  try {
+    const d = await getData('bins', '/api/bins', { ...state.focus.payload, year: state.year, season: state.season });
+    if (my !== seq || state.tab !== 'year' || !sameYS(d)) return;
+    renderYear(d);
+  } catch (err) {
+    if (my === seq && state.tab === 'year') $('yearOut').innerHTML = `<div class="empty">${errMsg(err)}</div>`;
+  } finally { stop(); }
+}
+
+function renderYear(d) {
+  const view = state.yearView;
+  const rows = d[view];
+  const total = rows.reduce((a, r) => a + r.count, 0);
+  const valid = rows.map(r => r.count >= 3 && r.mean != null);
+  if (total < 8 || valid.filter(Boolean).length < 2) {
+    $('yearOut').innerHTML = `<div class="empty">ย่านที่มีคนอยู่ในพื้นที่นี้มีน้อยเกินไปสำหรับเปรียบเทียบ (ข้อมูลอุณหภูมิละเอียด 1 กม.)<br>ลองเลือกจังหวัด หรือวาดพื้นที่ให้กว้างขึ้น${state.season === 'wet' ? '<br>หน้าฝนมีเมฆมาก ลองเลือกทั้งปีหรือหน้าแล้ง' : ''}</div>`;
+    return;
+  }
+  const data = rows.map((r, i) => (valid[i] ? r.mean : null));
+  const vals = data.filter(v => v != null);
+  const idx = valid.map((v, i) => (v ? i : -1)).filter(i => i >= 0);
+  const lo = rows[idx[0]], hi = rows[idx[idx.length - 1]];
+  const diff = hi.mean - lo.mean;
+  const what = view === 'green' ? 'พื้นที่สีเขียว' : 'สิ่งปลูกสร้างและถนน';
+  const word = diff >= 0 ? 'ร้อนกว่า' : 'เย็นกว่า';
+  $('yearOut').innerHTML = `<p class="lead" style="margin-top:12px">ในปี ${d.year} (${seasonShort()}) ย่านที่มี${what} <b>${hi.label}</b> ${word}ย่านที่มี${what} <b>${lo.label}</b> อยู่ <b>${f1(Math.abs(diff))} °C</b> (${f1(hi.mean)} เทียบกับ ${f1(lo.mean)} °C)</p>`;
+
+  $('yearChartWrap').hidden = false;
+  drawChart('year', 'yearChart', {
+    type: 'bar',
+    data: {
+      labels: rows.map(r => r.label),
+      datasets: [{
+        label: 'อุณหภูมิพื้นผิวช่วงบ่ายเฉลี่ย (°C)', data,
+        backgroundColor: data.map(v => (v == null ? '#d9d4cc' : cfg.lst_palette[levelOf(v)])),
+        borderColor: 'rgba(29,35,39,.35)', borderWidth: 1, borderRadius: 8, borderSkipped: false, maxBarThickness: 56
+      }]
+    },
+    options: barOptions('อุณหภูมิ (°C)', `สัดส่วน${what}ในช่อง 1 กม.`,
+      Math.floor(Math.min(...vals) - 1),
+      ctx => `${rows[ctx.dataIndex].count} ช่อง (ราว ${rows[ctx.dataIndex].count} ตร.กม.)`)
+  });
+  $('yearNote').hidden = false;
+  $('yearNote').textContent = `เฉพาะย่านที่มีคนอยู่ (${nf(cfg.pop_any)} คน/ตร.กม. ขึ้นไป) · อุณหภูมิ ${d.source} · พื้นผิว Dynamic World ${d.dw_year} · เป็นความสัมพันธ์ ไม่ได้พิสูจน์สาเหตุ · กลุ่มที่มีไม่ถึง 3 ช่องไม่แสดง`;
+}
+
+// ---------- แท็บ: ย้อนหลัง 20 ปี ----------
+async function loadHistory() {
+  const my = seq, view = state.histView;
+  $('histChartWrap').hidden = true;
+  $('histNote').hidden = true;
+  const stop = loading($('histOut'), 'กำลังดึงข้อมูลย้อนหลัง 20 ปี');
+  try {
+    const d = await getData(view, '/api/' + view, { ...state.focus.payload, season: state.season });
+    if (my !== seq || state.tab !== 'history' || state.histView !== view || d.season !== state.season) return;
+    if (view === 'trend') renderTrend(d); else renderChange(d);
+  } catch (err) {
+    if (my === seq && state.tab === 'history') $('histOut').innerHTML = `<div class="empty">${errMsg(err)}</div>`;
+  } finally { stop(); }
+}
+
+function renderTrend(d) {
+  const rows = d.rows;
+  if (rows.every(r => r.lst == null)) {
+    $('histOut').innerHTML = '<div class="empty">ไม่มีข้อมูลอุณหภูมิในย่านที่มีคนอยู่ของพื้นที่นี้ ลองเลือกพื้นที่ที่กว้างขึ้น</div>';
+    return;
+  }
+  const a = rows[0], b = rows[rows.length - 1];
+  let lead = 'ข้อมูลบางช่วงไม่พอ จึงสรุปการเปลี่ยนแปลงไม่ได้';
+  if ([a.lst, b.lst, a.built, b.built].every(v => v != null)) {
+    const dB = b.built - a.built, dL = b.lst - a.lst;
+    lead = `จากช่วง ${a.label} ถึง ${b.label} อาคารในย่านที่มีคนอยู่${dB >= 0 ? 'เพิ่มขึ้น' : 'ลดลง'} <b>${f1(Math.abs(dB))} จุด</b> (${f1(a.built)}% → ${f1(b.built)}%) ` +
+      `ขณะที่อุณหภูมิพื้นผิวช่วงบ่าย${dL >= 0 ? 'สูงขึ้น' : 'ต่ำลง'} <b>${f1(Math.abs(dL))} °C</b> (${f1(a.lst)} → ${f1(b.lst)} °C)`;
+  }
+  $('histOut').innerHTML = `<p class="lead" style="margin-top:12px">${lead}</p>`;
+  $('histChartWrap').hidden = false;
+  drawChart('history', 'histChart', {
+    type: 'line',
+    data: {
+      labels: rows.map(r => r.label),
+      datasets: [
+        { label: 'อุณหภูมิพื้นผิวช่วงบ่าย (°C)', data: rows.map(r => r.lst), borderColor: '#d1352b', backgroundColor: '#d1352b', borderWidth: 3, pointRadius: 5, tension: .25, yAxisID: 'y' },
+        { label: 'สัดส่วนอาคาร (%)', data: rows.map(r => r.built), borderColor: '#7a6fb0', backgroundColor: '#7a6fb0', borderWidth: 3, pointRadius: 5, tension: .25, borderDash: [6, 4], yAxisID: 'y1' }
+      ]
+    },
+    options: {
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 14, usePointStyle: true } } },
+      scales: {
+        y: { title: { display: true, text: 'อุณหภูมิ (°C)' }, grid: { color: '#efe9e0' } },
+        y1: { position: 'right', min: 0, title: { display: true, text: 'อาคาร (%)' }, grid: { drawOnChartArea: false } },
+        x: { title: { display: true, text: 'ช่วงปี (เฉลี่ย 5 ปี)' }, grid: { display: false } }
+      }
+    }
+  });
+  $('histNote').hidden = false;
+  $('histNote').textContent = `${cfg.seasons[state.season]} · อุณหภูมิ Aqua เฉพาะวันที่ท้องฟ้าโปร่ง · อาคารจาก GHSL (ไม่รวมถนน เพราะ Dynamic World ย้อนไปไม่ถึงปี 2005) · แต่ละปีอากาศร้อนเย็นต่างกัน ดูมุมมอง "แยกตามระดับที่สิ่งปลูกสร้างเพิ่ม" เพื่อเทียบกับพื้นที่ที่ไม่เปลี่ยน`;
+}
+
+function renderChange(d) {
+  const rows = d.rows;
+  const ok = rows.map(r => r.count >= 3 && r.mean != null);
+  if (!ok.some(Boolean)) {
+    $('histOut').innerHTML = '<div class="empty">ข้อมูลไม่พอสำหรับเทียบ (พื้นที่เล็กเกินไป หรือมีเมฆบังหลายปี)<br>ลองเลือกจังหวัด หรือวาดพื้นที่ให้กว้างขึ้น</div>';
+    return;
+  }
+  let lead;
+  if (ok[0] && ok[3]) {
+    const ctrl = rows[0], big = rows[3], diff = big.mean - ctrl.mean;
+    lead = `ช่วง 2003–07 ถึง 2018–22 ย่านที่อาคารเพิ่มมาก${big.mean >= 0 ? 'ร้อนขึ้น' : 'เย็นลง'} <b>${f1(Math.abs(big.mean))} °C</b> ` +
+      `ขณะที่พื้นที่ที่ไม่มีอาคารและไม่เปลี่ยน${ctrl.mean >= 0 ? 'ร้อนขึ้น' : 'เย็นลง'} ${f1(Math.abs(ctrl.mean))} °C ` +
+      `ส่วนต่าง <b>${diff >= 0 ? '+' : '−'}${f1(Math.abs(diff))} °C</b>`;
+  } else {
+    lead = 'กลุ่มเทียบหรือกลุ่ม "เพิ่มมาก" มีข้อมูลไม่พอในพื้นที่นี้ ดูแท่งที่มีข้อมูลประกอบ';
+  }
+  $('histOut').innerHTML = `<p class="lead" style="margin-top:12px">${lead}</p>`;
+  $('histChartWrap').hidden = false;
+  drawChart('history', 'histChart', {
+    type: 'bar',
+    data: {
+      labels: rows.map((r, i) => CHANGE_SHORT[i] || r.label),
+      datasets: [{
+        label: 'อุณหภูมิที่เปลี่ยนไป (°C)',
+        data: rows.map((r, i) => (ok[i] ? r.mean : null)),
+        backgroundColor: CHANGE_COLORS, borderColor: 'rgba(29,35,39,.35)', borderWidth: 1,
+        borderRadius: 8, borderSkipped: false, maxBarThickness: 56
+      }]
+    },
+    options: (() => {
+      const o = barOptions('เปลี่ยนไป (°C)', '', undefined,
+        ctx => `${rows[ctx.dataIndex].count} ช่อง (ราว ${rows[ctx.dataIndex].count} ตร.กม.)`);
+      o.scales.y.beginAtZero = true;
+      delete o.scales.y.min;
+      o.scales.x.ticks = { maxRotation: 0, autoSkip: false, font: { size: 11 } };
+      o.plugins.tooltip.callbacks.title = items => rows[items[0].dataIndex].label;
+      return o;
+    })()
+  });
+  $('histNote').hidden = false;
+  $('histNote').textContent = `${cfg.seasons[state.season]} · เทียบช่วง 2018–22 กับ 2003–07 · อาคารจาก GHSL ปี 2005 กับ 2020 · ใช้พื้นที่ที่ไม่เปลี่ยนเป็นตัวเทียบเพื่อหักผลของสภาพอากาศทั่วไป แต่การสร้างอาคารมักมาพร้อมการสูญเสียพืช จึงแยกสองสาเหตุนี้ออกจากกันไม่ได้`;
+}
+
+// ---------- ปุ่มในแผงข้อมูล ----------
+document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
+  state.tab = b.dataset.tab;
+  refreshPanel();
+}));
+document.querySelectorAll('#yearSeg button').forEach(b => b.addEventListener('click', () => {
+  state.yearView = b.dataset.view;
+  document.querySelectorAll('#yearSeg button').forEach(x => x.classList.toggle('on', x === b));
+  if (state.focus) loadYear();
+}));
+document.querySelectorAll('#histSeg button').forEach(b => b.addEventListener('click', () => {
+  state.histView = b.dataset.view;
+  document.querySelectorAll('#histSeg button').forEach(x => x.classList.toggle('on', x === b));
+  if (state.focus) loadHistory();
+}));
+$('btnPanel').addEventListener('click', () => setPanel(!document.body.classList.contains('panel-open')));
+$('btnPanelClose').addEventListener('click', () => setPanel(false));
+L.DomEvent.disableClickPropagation($('panel'));
+L.DomEvent.disableScrollPropagation($('panel'));
+L.DomEvent.disableClickPropagation($('bar'));
+
+// แถบล่างอาจขึ้นสองบรรทัด ให้สัญลักษณ์และเครดิตแผนที่ขยับตามความสูงจริง
+new ResizeObserver(() => {
+  document.documentElement.style.setProperty('--bar-real', $('bar').offsetHeight + 'px');
+}).observe($('bar'));
+
+// =============================================================== เลือกพื้นที่
+const FOCUS_STYLE = { color: '#0e5a6a', weight: 2.5, fillColor: '#0e5a6a', fillOpacity: 0.06, dashArray: '6 4' };
+let drawing = false, activeDraw = null;
+
+// 1) คลิกจุด
+map.on('click', e => {
+  if (drawing) return;
+  $('province').value = '';
+  const { lat, lng } = e.latlng;
+  setFocusLayer(L.circle(e.latlng, { ...FOCUS_STYLE, radius: cfg.point_radius_m, interactive: false }).addTo(map));
+  newFocus({ lat, lon: lng }, `รัศมี ${cfg.point_radius_m / 1000} กม. รอบจุดที่เลือก`);
+});
+
+// 2) วาดพื้นที่
+L.drawLocal.draw.handlers.polygon.tooltip = { start: 'คลิกเพื่อวางจุดแรก', cont: 'คลิกเพื่อวางจุดต่อไป', end: 'คลิกจุดแรกหรือดับเบิลคลิกเพื่อจบ' };
+L.drawLocal.draw.handlers.rectangle.tooltip = { start: 'กดค้างแล้วลากเพื่อวาดสี่เหลี่ยม' };
+L.drawLocal.draw.handlers.simpleshape.tooltip = { end: 'ปล่อยเมาส์เพื่อจบ' };
+
+function cancelDraw() {
+  if (activeDraw) { activeDraw.disable(); activeDraw = null; }
+  $('btnPoly').classList.remove('on');
+  $('btnRect').classList.remove('on');
+}
+
+function startDraw(kind) {
+  const wasOn = (kind === 'rect' ? $('btnRect') : $('btnPoly')).classList.contains('on');
+  cancelDraw();
+  if (wasOn) return;
+  const opts = { shapeOptions: { ...FOCUS_STYLE, dashArray: null }, showArea: false };
+  activeDraw = kind === 'rect' ? new L.Draw.Rectangle(map, opts) : new L.Draw.Polygon(map, { ...opts, allowIntersection: false });
+  activeDraw.enable();
+  (kind === 'rect' ? $('btnRect') : $('btnPoly')).classList.add('on');
+}
+
+map.on(L.Draw.Event.DRAWSTART, () => { drawing = true; });
+map.on(L.Draw.Event.DRAWSTOP, () => {
+  setTimeout(() => { drawing = false; }, 300);
+  $('btnPoly').classList.remove('on');
+  $('btnRect').classList.remove('on');
+});
+map.on(L.Draw.Event.CREATED, e => {
+  activeDraw = null;
+  $('province').value = '';
+  const layer = e.layer;
+  layer.options.interactive = false;
+  layer.addTo(map);
+  setFocusLayer(layer);
+  newFocus({ geometry: layer.toGeoJSON().geometry }, 'พื้นที่ที่วาด');
+});
+$('btnPoly').addEventListener('click', () => startDraw('poly'));
+$('btnRect').addEventListener('click', () => startDraw('rect'));
+
+// 3) เลือกจังหวัด
+let provinceNames = [];
+
+async function loadProvinces() {
+  try {
+    const list = await api('/api/provinces');
+    if (!Array.isArray(list)) throw new Error('รายชื่อจังหวัดผิดรูปแบบ');
+    provinceNames = list;
+    $('provList').innerHTML = list.map(n => `<option value="${n}"></option>`).join('');
+  } catch (err) {
+    setStatus('โหลดรายชื่อจังหวัดไม่ได้: ' + errMsg(err));
+  }
+}
+
+async function selectProvince(name) {
+  cancelDraw();
+  setFocusLayer(null);
+  $('province').value = name;
+  newFocus({ province: name }, 'จังหวัด ' + name);
+  try {
+    const g = await api('/api/province_shape?name=' + encodeURIComponent(name));
+    if (!state.focus || state.focus.payload.province !== name) return;
+    const layer = L.geoJSON(g, { interactive: false, style: FOCUS_STYLE }).addTo(map);
+    setFocusLayer(layer);
+    map.fitBounds(layer.getBounds(), { paddingTopLeft: [20, 20], paddingBottomRight: [document.body.classList.contains('panel-open') ? 420 : 20, 90] });
+  } catch (err) {
+    setStatus('โหลดขอบเขตจังหวัดไม่ได้: ' + errMsg(err));
+  }
+}
+
+function tryProvinceInput() {
+  const v = $('province').value.trim().toLowerCase();
+  if (!v) return;
+  const hit = provinceNames.find(n => n.toLowerCase() === v) || provinceNames.find(n => n.toLowerCase().startsWith(v));
+  if (hit) selectProvince(hit);
+  else setStatus('ไม่พบจังหวัดนี้ (ชื่อจังหวัดเป็นภาษาอังกฤษ เช่น Chiang Mai)');
+}
+$('province').addEventListener('change', tryProvinceInput);
+$('province').addEventListener('keydown', e => { if (e.key === 'Enter') tryProvinceInput(); });
+
+document.querySelectorAll('[data-quick]').forEach(btn => btn.addEventListener('click', () => {
+  const keys = btn.dataset.quick.split('|');
+  const hit = provinceNames.find(n => keys.some(k => n.toLowerCase().includes(k)));
+  if (hit) selectProvince(hit); else setStatus('ยังโหลดรายชื่อจังหวัดไม่เสร็จ หรือไม่พบชื่อจังหวัดนี้');
+}));
+
+// ล้าง
+$('btnClear').addEventListener('click', () => {
+  cancelDraw();
+  setFocusLayer(null);
+  $('province').value = '';
+  seq++;
+  cache = {};
+  state.focus = null;
+  $('pTitle').textContent = 'ยังไม่ได้เลือกพื้นที่';
+  Object.keys(charts).forEach(k => { if (charts[k]) { charts[k].destroy(); charts[k] = null; } });
+  refreshPanel();
+});
+
+// =============================================================== ปี / ฤดู
+$('year').addEventListener('change', e => {
+  state.year = +e.target.value;
+  loadOverlay();
+  if (state.focus && state.tab !== 'history') refreshPanel(); else updateSub();
+});
+document.querySelectorAll('#seasonSeg button').forEach(b => b.addEventListener('click', () => {
+  state.season = b.dataset.season;
+  document.querySelectorAll('#seasonSeg button').forEach(x => x.classList.toggle('on', x === b));
+  loadOverlay();
+  if (state.focus) refreshPanel(); else updateSub();
+}));
+
+// =============================================================== คำอธิบาย
+function openHelp(open) { $('help').classList.toggle('open', open); }
+$('btnHelp').addEventListener('click', () => openHelp(true));
+$('helpClose').addEventListener('click', () => openHelp(false));
+$('help').addEventListener('click', e => { if (e.target === $('help')) openHelp(false); });
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if ($('help').classList.contains('open')) openHelp(false); else cancelDraw();
+});
+
+function renderHelpCriteria() {
+  const c = cfg.prio_colors;
+  $('helpCrit').innerHTML = `
+    <div class="crit"><i style="background:${c[2]}"></i><div><b>เร่งด่วน · มีที่โล่ง</b> ช่วงบ่ายร้อนเกิน ${cfg.very_hot} °C, คนอยู่ ${nf(cfg.pop_dense)} คน/ตร.กม. ขึ้นไป, พื้นที่สีเขียวไม่ถึง ${Math.round(cfg.green_low * 100)}% และมีที่โล่งอย่างน้อย ${Math.round(cfg.open_min * 100)}% ของช่อง → เริ่มทำสวนหรือปลูกต้นไม้ได้ก่อน</div></div>
+    <div class="crit"><i style="background:${c[1]}"></i><div><b>เร่งด่วน · ไม่มีที่โล่ง</b> เงื่อนไขเดียวกันแต่ที่โล่งไม่ถึง ${Math.round(cfg.open_min * 100)}% → ใช้วิธีอื่น เช่น ต้นไม้ริมถนน หลังคาเขียว หลังคาสีอ่อน</div></div>
+    <div class="crit"><i style="background:${c[0]}"></i><div><b>เฝ้าระวัง</b> ช่วงบ่ายร้อนเกิน ${cfg.hot} °C และมีคนอยู่ ${nf(cfg.pop_any)} คน/ตร.กม. ขึ้นไป</div></div>
+    <small>เกณฑ์ประชากรอ้างอิงนิยามเขตเมืองของ GHSL (${nf(cfg.pop_any)} และ ${nf(cfg.pop_dense)} คน/ตร.กม.) ส่วนเกณฑ์อื่นเป็นค่าเริ่มต้นที่ตั้งขึ้นสำหรับโครงงานนี้ ปรับได้ในไฟล์ app.py</small>`;
+}
+
+async function loadCoverage() {
+  try {
+    const r = await fetch('/api/coverage');
+    const d = await r.json();
+    if (r.ok && d.viirs_last) $('coverage').textContent = `ข้อมูลอุณหภูมิ VIIRS ล่าสุดที่พบในระบบ: ${d.viirs_last}`;
+  } catch (err) { /* ไม่จำเป็นต้องแจ้ง */ }
+}
+
+// =============================================================== เริ่มต้น
+async function init() {
+  let startupError = null;
+  try {
+    const d = await api('/api/config');
+    if (!d.version || d.version < 3) startupError = 'เซิร์ฟเวอร์ยังเป็น app.py เวอร์ชันเก่า ให้แทนที่ไฟล์แล้วรัน python app.py ใหม่';
+    if (d.first_year) cfg = { ...cfg, ...d };
+  } catch (err) { startupError = errMsg(err); }
+  state.year = cfg.default_year;
+  for (let y = cfg.last_year; y >= cfg.first_year; y--) $('year').add(new Option(y, y));
+  $('year').value = state.year;
+  buildLayerList();
+  renderHelpCriteria();
+  refreshPanel();
+  if (startupError) { setStatus(startupError); return; }
+  loadOverlay();
+  loadProvinces();
+  loadCoverage();
+}
+init();
+</script>
+</body>
+</html>

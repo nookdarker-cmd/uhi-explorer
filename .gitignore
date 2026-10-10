@@ -1,0 +1,9 @@
+# สภาพแวดล้อม Python บนเครื่อง
+venv/
+__pycache__/
+_backup_old/
+*.pyc
+
+# ห้ามอัปโหลดกุญแจ service account หรือไฟล์ลับใด ๆ
+*.json
+.env
