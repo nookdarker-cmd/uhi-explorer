@@ -231,8 +231,8 @@
       <datalist id="provList"></datalist>
     </label>
     <div class="quick">
-      <button class="pill" data-quick="bangkok|krung thep">กรุงเทพฯ</button>
-      <button class="pill" data-quick="khon kaen">ขอนแก่น</button>
+      <button class="pill" data-quick="Bangkok">กรุงเทพฯ</button>
+      <button class="pill" data-quick="Khon Kaen">ขอนแก่น</button>
     </div>
     <div class="tools">
       <button class="ibtn" id="btnPoly" title="วาดพื้นที่ (คลิกวางจุด ดับเบิลคลิกเพื่อจบ)" aria-label="วาดพื้นที่">
@@ -321,16 +321,17 @@
         <li>อุณหภูมิใช้เฉพาะพิกเซลที่ดาวเทียมประเมินว่าคลาดเคลื่อนไม่เกิน 2 °C ทั้งที่ติดป้าย "คุณภาพดี" และ "คุณภาพอื่น" เพราะถ้าใช้เฉพาะคุณภาพดี ย่านเมืองหนาแน่นจะหายไปมาก</li>
         <li>"ที่โล่ง" เป็นแค่<b>จุดที่น่าตรวจสอบ</b> ดาวเทียมบอกไม่ได้ว่าเป็นที่ของใคร หรือมีแผนก่อสร้างหรือยัง ต้องตรวจกับผังเมืองหรือที่ดินของรัฐก่อนเสนอ</li>
         <li>ตัวเลขที่เทียบกันเป็น<b>ความสัมพันธ์</b>จากข้อมูล ไม่ได้พิสูจน์สาเหตุ และไม่ใช่คำทำนายว่าปลูกต้นไม้แล้วจะเย็นลงเท่านั้นพอดี</li>
-        <li>สัดส่วนพื้นผิวคำนวณจากค่าความน่าจะเป็นของแบบจำลอง เป็นค่าประมาณ ลานโล่งในเมืองบางส่วนถูกนับเป็นสิ่งปลูกสร้าง</li>
+        <li>สัดส่วนพื้นผิวคำนวณจากค่าความน่าจะเป็นของแบบจำลอง เป็นค่าประมาณ ลานโล่งในเมืองบางส่วนถูกนับเป็นสิ่งปลูกสร้าง ส่วน "ที่โล่ง" ใช้แผนที่ปี 2021 บางแห่งอาจถูกสร้างไปแล้ว</li>
         <li>ประชากรเป็นค่าประมาณที่กระจายจากสำมะโนตามพื้นที่อาคาร เหมาะดูภาพรวมระดับย่าน และเป็นการสัมผัสความร้อน ไม่ใช่จำนวนผู้ป่วย</li>
       </ul>
 
       <h3>แหล่งข้อมูล</h3>
       <ul>
-        <li>อุณหภูมิพื้นผิว: NASA MODIS Aqua (MYD11A1) ปี 2003–2022 และ VIIRS (VNP21A1D) ปี 2023 เป็นต้นไป</li>
+        <li>อุณหภูมิพื้นผิว: NASA MODIS Aqua (MYD11A1) ปี 2003–2022 และ VIIRS (VNP21A1D) ปี 2023 เป็นต้นไป โดยปรับค่า VIIRS ให้อยู่ระดับเดียวกับ Aqua ทีละพิกเซล จากส่วนต่างเฉลี่ยของสองดาวเทียมในช่วงที่วัดซ้อนกัน (2013–2020) เพื่อให้เทียบข้ามปีได้</li>
         <li>พื้นผิว: Dynamic World V1 ปี 2016 เป็นต้นไป (This dataset is produced for the Dynamic World Project by Google in partnership with National Geographic Society and the World Resources Institute.)</li>
+        <li>ที่โล่ง (พุ่มไม้ ทุ่งหญ้า ดินเปล่า): ESA WorldCover 2021 ละเอียด 10 ม.</li>
         <li>สิ่งปลูกสร้างย้อนหลังและประชากร: GHSL, European Commission JRC</li>
-        <li>ขอบเขตจังหวัด: FAO GAUL 2015 (ใช้เพื่อการศึกษา ไม่ใช่เชิงพาณิชย์)</li>
+        <li>ขอบเขตจังหวัด: FAO GAUL 2015 (ใช้เพื่อการศึกษา ไม่ใช่เชิงพาณิชย์) ในชุดนี้บึงกาฬยังรวมอยู่กับหนองคาย</li>
       </ul>
       <small id="coverage"></small>
     </div>
@@ -362,8 +363,8 @@ const COVER = [
   ['WATER', 'แหล่งน้ำ', '#5b9bd1']
 ];
 const CHANGE_COLORS = ['#b8bec2', '#f1b6da', '#de77ae', '#c51b7d', '#7a6fb0'];
-const CHANGE_SHORT = [['ไม่มีอาคาร', '(กลุ่มเทียบ)'], ['เพิ่มเล็กน้อย', '(2–10 จุด)'], ['เพิ่มปานกลาง', '(10–25 จุด)'],
-                      ['เพิ่มมาก', '(เกิน 25 จุด)'], ['เมืองเดิม', '(หนาแน่นอยู่แล้ว)']];
+const CHANGE_SHORT = [['ไม่มีอาคาร', '(กลุ่มเทียบ)'], ['อาคารเพิ่มน้อย', '(1–4 จุด)'], ['เพิ่มปานกลาง', '(4–8 จุด)'],
+                      ['เพิ่มมาก', '(เกิน 8 จุด)'], ['เมืองเดิม', '(หนาแน่นอยู่แล้ว)']];
 
 const LAYERS = {
   priority: { name: 'ย่านที่ควรปรับปรุง', desc: 'ร้อนมาก + คนหนาแน่น + เขียวน้อย', minZoom: 8, season: true },
@@ -381,6 +382,10 @@ const state = {
 
 const $ = id => document.getElementById(id);
 const nf = n => Math.round(n).toLocaleString('th-TH');
+// จำนวนคนปัดให้อ่านง่าย (ข้อมูลประชากรเป็นค่าประมาณ ไม่ควรแสดงละเอียดถึงหลักหน่วย)
+const nfP = n => (n >= 1e6 ? `${(n / 1e6).toFixed(1)} ล้านคน`
+  : `${(n >= 1000 ? Math.round(n / 100) * 100 : Math.round(n)).toLocaleString('th-TH')} คน`);
+const srcLabel = s => s === 'VIIRS' ? 'VIIRS (ปรับเทียบกับ Aqua)' : s;
 const f1 = x => x.toFixed(1);
 const levelOf = v => cfg.lst_breaks.reduce((l, b) => l + (v > b ? 1 : 0), 0);
 const seasonShort = () => ({ all: 'ทั้งปี', dry: 'หน้าแล้ง', wet: 'หน้าฝน' })[state.season];
@@ -488,15 +493,16 @@ function progress(on) {
   else { p.className = 'done'; }
 }
 
+let overlayMinZoom = null;
 function updateZoomHint() {
-  const need = LAYERS[state.layer].minZoom;
+  const need = overlayMinZoom != null ? overlayMinZoom : LAYERS[state.layer].minZoom;
   $('zoomHint').hidden = map.getZoom() >= need;
 }
 map.on('zoomend', updateZoomHint);
 
 function dataNote(d) {
   const parts = [];
-  if (d.source) parts.push(`อุณหภูมิ ${d.source} ปี ${d.year} (${seasonShort()})`);
+  if (d.source) parts.push(`อุณหภูมิ ${srcLabel(d.source)} ปี ${d.year} (${seasonShort()})`);
   if (d.dw_year) parts.push(`พื้นผิว Dynamic World ${d.dw_year}`);
   if (d.pop_epoch) parts.push(`ประชากร GHSL ${d.pop_epoch}`);
   return parts.join(' · ');
@@ -506,6 +512,7 @@ async function loadOverlay() {
   const key = layerKey();
   const req = ++overlayReq;
   renderLegend();
+  overlayMinZoom = null;
   updateZoomHint();
   if (overlay) { map.removeLayer(overlay); overlay = null; }
   setStatus('กำลังเตรียมชั้นข้อมูล…');
@@ -519,7 +526,9 @@ async function loadOverlay() {
       tileCache[key] = d;
     }
     if (req !== overlayReq) return;
-    overlay = L.tileLayer(d.url, { opacity: state.opacity, minZoom: LAYERS[state.layer].minZoom, maxZoom: 19 });
+    overlayMinZoom = d.min_zoom != null ? d.min_zoom : LAYERS[state.layer].minZoom;
+    updateZoomHint();
+    overlay = L.tileLayer(d.url, { opacity: state.opacity, minZoom: overlayMinZoom, maxZoom: 19 });
     let pending = 0;
     overlay.on('loading', () => progress(true));
     overlay.on('load', () => progress(false));
@@ -527,7 +536,7 @@ async function loadOverlay() {
       if (pending++ === 0) setStatus('บางส่วนของแผนที่คำนวณไม่ทัน ลองซูมเข้าหรือรอสักครู่');
     });
     overlay.addTo(map);
-    if (map.getZoom() < LAYERS[state.layer].minZoom) progress(false);
+    if (map.getZoom() < overlayMinZoom) progress(false);
     let note = dataNote(d);
     if (d.dw_year && state.year < cfg.dw_first_year) note += ` (ก่อนปี ${cfg.dw_first_year} ใช้ข้อมูลพื้นผิวปีแรกที่มี)`;
     setStatus(note || LAYERS[state.layer].name);
@@ -696,20 +705,20 @@ function renderOverview(d) {
   const urgentPeople = p[2].people + p[3].people;
   let lead;
   if (urgentArea >= 0.5) {
-    lead = `พบย่านเร่งด่วนประมาณ <b>${nf(urgentArea)} ตร.กม.</b> มีคนอาศัยราว <b>${nf(urgentPeople)} คน</b>`;
+    lead = `พบย่านเร่งด่วนประมาณ <b>${nf(urgentArea)} ตร.กม.</b> มีคนอาศัยราว <b>${nfP(urgentPeople)}</b>`;
     if (p[3].area_km2 >= 0.5) lead += ` ในนี้ ${nf(p[3].area_km2)} ตร.กม. ยังมีที่โล่งรวมราว <b>${p[3].open_km2.toFixed(1)} ตร.กม.</b> ที่อาจเริ่มทำเป็นพื้นที่สีเขียวได้ก่อน`;
     if (p[2].area_km2 >= 0.5) lead += ` ส่วนอีก ${nf(p[2].area_km2)} ตร.กม. แทบไม่มีที่โล่ง ต้องใช้วิธีอื่น เช่น ต้นไม้ริมถนน หลังคาเขียว หรือหลังคาสีอ่อน`;
   } else if (p[1].area_km2 >= 0.5) {
-    lead = `ยังไม่พบย่านที่เข้าเกณฑ์เร่งด่วน แต่มี <b>${nf(p[1].area_km2)} ตร.กม.</b> ที่ร้อนและมีคนอยู่ ควรเฝ้าระวัง (ราว ${nf(p[1].people)} คน)`;
+    lead = `ยังไม่พบย่านที่เข้าเกณฑ์เร่งด่วน แต่มี <b>${nf(p[1].area_km2)} ตร.กม.</b> ที่ร้อนและมีคนอยู่ ควรเฝ้าระวัง (ราว ${nfP(p[1].people)})`;
   } else {
     lead = 'ไม่พบย่านที่เข้าเกณฑ์ในปีและฤดูนี้';
   }
   const row = (color, title, sub, num) =>
     `<div class="prio-row"><i style="background:${color}"></i><b>${title}</b><span class="num">${num}</span><span class="sub">${sub}</span></div>`;
   html += `<section><h3>ย่านที่ควรปรับปรุง</h3><p class="lead">${lead}</p>
-    ${row(pc[2], 'เร่งด่วน · มีที่โล่ง', `${nf(p[3].people)} คน · ที่โล่งรวม ${p[3].open_km2.toFixed(1)} ตร.กม.`, `${nf(p[3].area_km2)} ตร.กม.`)}
-    ${row(pc[1], 'เร่งด่วน · ไม่มีที่โล่ง', `${nf(p[2].people)} คน`, `${nf(p[2].area_km2)} ตร.กม.`)}
-    ${row(pc[0], 'เฝ้าระวัง', `${nf(p[1].people)} คน`, `${nf(p[1].area_km2)} ตร.กม.`)}
+    ${row(pc[2], 'เร่งด่วน · มีที่โล่ง', `${nfP(p[3].people)} · ที่โล่งรวม ${p[3].open_km2.toFixed(1)} ตร.กม.`, `${nf(p[3].area_km2)} ตร.กม.`)}
+    ${row(pc[1], 'เร่งด่วน · ไม่มีที่โล่ง', `${nfP(p[2].people)}`, `${nf(p[2].area_km2)} ตร.กม.`)}
+    ${row(pc[0], 'เฝ้าระวัง', `${nfP(p[1].people)}`, `${nf(p[1].area_km2)} ตร.กม.`)}
   </section>`;
 
   // พื้นผิว
@@ -727,15 +736,15 @@ function renderOverview(d) {
   const classified = d.expo.reduce((a, r) => a + r.people, 0);
   if (classified >= 1) {
     const hot = d.expo.filter(r => r.level >= cfg.hot_level).reduce((a, r) => a + r.people, 0);
-    const segs = d.expo.map(r => `<span style="width:${(r.people / classified * 100).toFixed(2)}%;background:${cfg.lst_palette[r.level]}" title="${LEVEL_NAMES[r.level]}: ${nf(r.people)} คน"></span>`).join('');
+    const segs = d.expo.map(r => `<span style="width:${(r.people / classified * 100).toFixed(2)}%;background:${cfg.lst_palette[r.level]}" title="${LEVEL_NAMES[r.level]}: ${nfP(r.people)}"></span>`).join('');
     const keys = d.expo.filter(r => r.people >= 1).map(r => `<span><i style="background:${cfg.lst_palette[r.level]}"></i>${LEVEL_NAMES[r.level]} ${Math.round(r.people / classified * 100)}%</span>`).join('');
     html += `<section><h3>ผู้คนกับความร้อน</h3>
-      <p class="lead">ประชากรราว ${nf(d.pop_total)} คน ในจำนวนนี้ <b>${nf(hot)} คน (${Math.round(hot / classified * 100)}%)</b> อาศัยในย่านที่ช่วงบ่ายร้อนมากขึ้นไป (เกิน ${cfg.very_hot} °C)</p>
+      <p class="lead">ประชากรราว ${nfP(d.pop_total)} ในจำนวนนี้ <b>${nfP(hot)} (${Math.round(hot / classified * 100)}%)</b> อาศัยในย่านที่ช่วงบ่ายร้อนมากขึ้นไป (เกิน ${cfg.very_hot} °C)</p>
       <div class="stack">${segs}</div><div class="keys">${keys}</div>
       <p class="note">ประชากรจาก GHSL ปี ${d.pop_epoch} เป็นค่าประมาณ · เป็นการสัมผัสความร้อน ไม่ใช่จำนวนผู้ป่วย</p></section>`;
   }
 
-  html += `<p class="note">อุณหภูมิจากดาวเทียม ${d.source} เฉพาะวันที่ท้องฟ้าโปร่ง · พื้นที่ที่เลือกราว ${nf(d.area_km2)} ตร.กม.</p>`;
+  html += `<p class="note">อุณหภูมิจากดาวเทียม ${srcLabel(d.source)} เฉพาะวันที่ท้องฟ้าโปร่ง · พื้นที่ที่เลือกราว ${nf(d.area_km2)} ตร.กม.</p>`;
   return html;
 }
 
@@ -807,7 +816,7 @@ function renderYear(d) {
       ctx => `${rows[ctx.dataIndex].count} ช่อง (ราว ${rows[ctx.dataIndex].count} ตร.กม.)`)
   });
   $('yearNote').hidden = false;
-  $('yearNote').textContent = `เฉพาะย่านที่มีคนอยู่ (${nf(cfg.pop_any)} คน/ตร.กม. ขึ้นไป) · อุณหภูมิ ${d.source} · พื้นผิว Dynamic World ${d.dw_year} · เป็นความสัมพันธ์ ไม่ได้พิสูจน์สาเหตุ · กลุ่มที่มีไม่ถึง 3 ช่องไม่แสดง`;
+  $('yearNote').textContent = `เฉพาะย่านที่มีคนอยู่ (${nf(cfg.pop_any)} คน/ตร.กม. ขึ้นไป) · อุณหภูมิ ${srcLabel(d.source)} · พื้นผิว Dynamic World ${d.dw_year} · เป็นความสัมพันธ์ ไม่ได้พิสูจน์สาเหตุ · กลุ่มที่มีไม่ถึง 3 ช่องไม่แสดง`;
 }
 
 // ---------- แท็บ: ย้อนหลัง 20 ปี ----------
@@ -985,51 +994,54 @@ map.on(L.Draw.Event.CREATED, e => {
 $('btnPoly').addEventListener('click', () => startDraw('poly'));
 $('btnRect').addEventListener('click', () => startDraw('rect'));
 
-// 3) เลือกจังหวัด
-let provinceNames = [];
+// 3) เลือกจังหวัด (แสดงชื่อไทย ส่งชื่ออังกฤษไปเซิร์ฟเวอร์)
+let provinces = [];   // [{en, th}]
+const provTh = en => (provinces.find(p => p.en === en) || {}).th || en;
+const provTitle = en => (en === 'Bangkok' ? '' : 'จังหวัด') + provTh(en);
 
 async function loadProvinces() {
   try {
     const list = await api('/api/provinces');
     if (!Array.isArray(list)) throw new Error('รายชื่อจังหวัดผิดรูปแบบ');
-    provinceNames = list;
-    $('provList').innerHTML = list.map(n => `<option value="${n}"></option>`).join('');
+    provinces = list.map(p => (typeof p === 'string' ? { en: p, th: p } : p))
+      .sort((a, b) => a.th.localeCompare(b.th, 'th'));
+    $('provList').innerHTML = provinces.map(p => `<option value="${p.th}" label="${p.en}"></option>`).join('');
+    if (state.focus && state.focus.payload.province) $('pTitle').textContent = provTitle(state.focus.payload.province);
   } catch (err) {
     setStatus('โหลดรายชื่อจังหวัดไม่ได้: ' + errMsg(err));
   }
 }
 
-async function selectProvince(name) {
+async function selectProvince(en) {
   cancelDraw();
   setFocusLayer(null);
-  $('province').value = name;
-  newFocus({ province: name }, 'จังหวัด ' + name);
+  $('province').value = provTh(en);
+  newFocus({ province: en }, provTitle(en));
   try {
-    const g = await api('/api/province_shape?name=' + encodeURIComponent(name));
-    if (!state.focus || state.focus.payload.province !== name) return;
+    const g = await api('/api/province_shape?name=' + encodeURIComponent(en));
+    if (!state.focus || state.focus.payload.province !== en) return;
     const layer = L.geoJSON(g, { interactive: false, style: FOCUS_STYLE }).addTo(map);
     setFocusLayer(layer);
-    map.fitBounds(layer.getBounds(), { paddingTopLeft: [20, 20], paddingBottomRight: [document.body.classList.contains('panel-open') ? 420 : 20, 90] });
+    const wide = document.body.classList.contains('panel-open') && window.innerWidth > 860;
+    map.fitBounds(layer.getBounds(), { paddingTopLeft: [20, 20], paddingBottomRight: [wide ? $('panel').offsetWidth + 30 : 20, 100] });
   } catch (err) {
     setStatus('โหลดขอบเขตจังหวัดไม่ได้: ' + errMsg(err));
   }
 }
 
 function tryProvinceInput() {
-  const v = $('province').value.trim().toLowerCase();
+  const v = $('province').value.trim().replace(/^จังหวัด\s*/, '').toLowerCase();
   if (!v) return;
-  const hit = provinceNames.find(n => n.toLowerCase() === v) || provinceNames.find(n => n.toLowerCase().startsWith(v));
-  if (hit) selectProvince(hit);
-  else setStatus('ไม่พบจังหวัดนี้ (ชื่อจังหวัดเป็นภาษาอังกฤษ เช่น Chiang Mai)');
+  const hit = provinces.find(p => p.th.toLowerCase() === v || p.en.toLowerCase() === v)
+    || provinces.find(p => p.th.toLowerCase().startsWith(v) || p.en.toLowerCase().startsWith(v));
+  if (hit) selectProvince(hit.en);
+  else setStatus('ไม่พบจังหวัดนี้ ลองพิมพ์ชื่อไทยหรืออังกฤษ เช่น เชียงใหม่ หรือ Chiang Mai');
 }
 $('province').addEventListener('change', tryProvinceInput);
 $('province').addEventListener('keydown', e => { if (e.key === 'Enter') tryProvinceInput(); });
 
-document.querySelectorAll('[data-quick]').forEach(btn => btn.addEventListener('click', () => {
-  const keys = btn.dataset.quick.split('|');
-  const hit = provinceNames.find(n => keys.some(k => n.toLowerCase().includes(k)));
-  if (hit) selectProvince(hit); else setStatus('ยังโหลดรายชื่อจังหวัดไม่เสร็จ หรือไม่พบชื่อจังหวัดนี้');
-}));
+// ปุ่มลัดใช้ชื่ออังกฤษตรง ๆ จึงกดได้แม้รายชื่อจังหวัดยังโหลดไม่เสร็จ
+document.querySelectorAll('[data-quick]').forEach(btn => btn.addEventListener('click', () => selectProvince(btn.dataset.quick)));
 
 // ล้าง
 $('btnClear').addEventListener('click', () => {
@@ -1080,7 +1092,15 @@ async function loadCoverage() {
   try {
     const r = await fetch('/api/coverage');
     const d = await r.json();
-    if (r.ok && d.viirs_last) $('coverage').textContent = `ข้อมูลอุณหภูมิ VIIRS ล่าสุดที่พบในระบบ: ${d.viirs_last}`;
+    if (!r.ok) return;
+    const parts = [];
+    if (d.viirs_last) parts.push(`ข้อมูลอุณหภูมิ VIIRS ล่าสุดในระบบ: ${d.viirs_last}`);
+    if (d.precompute) {
+      const { ready, total } = d.precompute;
+      parts.push(ready >= total ? 'ข้อมูลทุกปีคำนวณล่วงหน้าไว้แล้ว (โหลดเร็ว)'
+        : `กำลังคำนวณข้อมูลล่วงหน้า ${ready}/${total} ชุด ระหว่างนี้บางพื้นที่อาจโหลดช้า`);
+    }
+    $('coverage').textContent = parts.join(' · ');
   } catch (err) { /* ไม่จำเป็นต้องแจ้ง */ }
 }
 

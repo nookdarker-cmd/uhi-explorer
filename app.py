@@ -4,21 +4,31 @@
   เร่งด่วน = ร้อนมาก + คนอยู่หนาแน่น + พื้นที่สีเขียวน้อย
   แล้วดูต่อว่ามี "ที่โล่ง" ที่อาจทำเป็นพื้นที่สีเขียวได้หรือไม่
 
-ข้อมูล (วิเคราะห์บนกริด 1 กม. เดียวกับข้อมูลอุณหภูมิ)
-  - อุณหภูมิพื้นผิวช่วงบ่าย 12-14 น. : MODIS Aqua (2003-2022), VIIRS (2023 ขึ้นไป)
+ข้อมูล (วิเคราะห์บนกริด 30 ฟิลิปดา ≈ 1 กม.)
+  - อุณหภูมิพื้นผิวช่วงบ่าย 12-14 น. : MODIS Aqua (2003-2022), VIIRS (2023 ขึ้นไป
+    ปรับเทียบให้อยู่ระดับเดียวกับ Aqua รายพิกเซล จากช่วงที่วัดซ้อนกัน 2013-2020)
   - พื้นผิว (สิ่งปลูกสร้างรวมถนน, ต้นไม้, หญ้า, ดินเปล่า) : Dynamic World 10 ม. (2016 ขึ้นไป)
-  - สิ่งปลูกสร้างย้อนหลัง 20 ปี : GHSL GHS_BUILT_S (ทุก 5 ปี)
-  - ประชากร : GHSL GHS_POP (ทุก 5 ปี)
+  - ที่โล่ง (หญ้า พุ่มไม้ ดินเปล่า) : ESA WorldCover 2021 10 ม.
+  - สิ่งปลูกสร้างย้อนหลัง 20 ปี และประชากร : GHSL (ทุก 5 ปี)
+
+ความเร็ว: เซิร์ฟเวอร์สั่ง Earth Engine คำนวณชั้นข้อมูลรายปีล่วงหน้าเก็บเป็น asset
+ใน projects/<project>/assets/uhi_v1 ระหว่างที่ยังไม่เสร็จจะคำนวณสดแทน (ช้ากว่า)
 """
 import json
 import os
 import tempfile
+import threading
+import time
 from datetime import datetime
 
 import ee
 from flask import Flask, jsonify, render_template, request
 
 PROJECT_ID = os.environ.get('EE_PROJECT', 'hicm-510809')
+ASSET_FOLDER = f'projects/{PROJECT_ID}/assets/uhi_v1'
+TASK_PREFIX = 'uhi_v1_'
+# สั่งคำนวณล่วงหน้าอัตโนมัติบนเว็บจริง (Render ตั้งค่า RENDER=true ให้เอง)
+PRECOMPUTE = os.environ.get('UHI_PRECOMPUTE', '1' if os.environ.get('RENDER') else '0') == '1'
 
 
 def init_earth_engine():
@@ -41,13 +51,19 @@ init_earth_engine()
 app = Flask(__name__)
 
 THAILAND = ee.Geometry.Rectangle([97.3, 5.6, 105.7, 20.5])
+GRID_CRS = 'EPSG:4326'
+GRID_TRANSFORM = [1 / 120, 0, 97.3, 0, -1 / 120, 20.5]   # 30 ฟิลิปดา ≈ 0.9 กม.
+GRID = ee.Projection(GRID_CRS, GRID_TRANSFORM)
 
 HOUR_MIN, HOUR_MAX = 12, 14      # ช่วงเวลาสังเกต (เวลาท้องถิ่นสุริยะ)
 FIRST_YEAR = 2003                # ปีแรกที่ Aqua มีข้อมูลเต็มปี
 AQUA_LAST_YEAR = 2022            # หลังจากนี้ Aqua เลื่อนเวลาผ่านจนเกิน 14 น.
 DW_FIRST_YEAR = 2016             # ปีแรกที่ Dynamic World มีข้อมูลเต็มปี
+BIAS_YEARS = (2013, 2020)        # ช่วงที่ใช้ปรับเทียบ VIIRS กับ Aqua
 LAST_YEAR = datetime.now().year - 1
 DEFAULT_YEAR = min(2022, LAST_YEAR)
+POP_EPOCHS = (2005, 2010, 2015, 2020)
+MAX_AREA_KM2 = 30000             # พื้นที่ที่วาดได้มากสุด
 
 # ------------------------------------------------------------ เกณฑ์ (ปรับได้ที่นี่)
 LST_BREAKS = [30, 34, 38, 42]    # ระดับสีอุณหภูมิ (°C)
@@ -57,7 +73,8 @@ VERY_HOT = 38                    # ร้อนมาก (°C) -> เร่ง�
 POP_ANY = 300                    # คน/ตร.กม. ขึ้นไป = มีคนอยู่ (นิยาม urban cluster ของ GHSL)
 POP_DENSE = 1500                 # คน/ตร.กม. ขึ้นไป = หนาแน่น (นิยาม urban centre ของ GHSL)
 GREEN_LOW = 0.15                 # พื้นที่สีเขียวน้อยกว่านี้ = เขียวน้อย
-OPEN_MIN = 0.05                  # ที่โล่งตั้งแต่นี้ (สัดส่วนของช่อง) = มีที่โล่ง
+OPEN_MIN = 0.05                  # ที่โล่งตั้งแต่นี้ (สัดส่วนของช่อง ≈ 5 ไร่ต่อ 1 ตร.กม.) = มีที่โล่ง
+OPEN_CLASSES = (20, 30, 60)      # WorldCover: พุ่มไม้, ทุ่งหญ้า, ดินเปล่า
 PRIO_COLORS = ['#f2c14e', '#f08a24', '#d1352b']  # เฝ้าระวัง / เร่งด่วน-ไม่มีที่โล่ง / เร่งด่วน-มีที่โล่ง
 POINT_RADIUS_M = 2000            # คลิกจุด = วิเคราะห์วงกลมรัศมีนี้
 
@@ -72,12 +89,60 @@ GREEN_LABELS = ['ต่ำกว่า 10%', '10–20%', '20–30%', '30–50%',
 BLOCKS = [(2005, 2003, 2007), (2010, 2008, 2012),
           (2015, 2013, 2017), (2020, 2018, 2022)]
 BLOCK_LABELS = {2005: '2003–07', 2010: '2008–12', 2015: '2013–17', 2020: '2018–22'}
-CHANGE_LABELS = ['ไม่มีสิ่งปลูกสร้าง (คงเดิม)', 'เพิ่มเล็กน้อย (2–10 จุด)',
-                 'เพิ่มปานกลาง (10–25 จุด)', 'เพิ่มมาก (มากกว่า 25 จุด)',
+# กลุ่มตามพื้นที่อาคารที่เพิ่มขึ้น 2005 -> 2020 (จุดเปอร์เซ็นต์ของพื้นที่ช่อง)
+CHANGE_LABELS = ['ไม่มีอาคารและไม่เปลี่ยน (กลุ่มเทียบ)', 'อาคารเพิ่มเล็กน้อย (1–4 จุด)',
+                 'อาคารเพิ่มปานกลาง (4–8 จุด)', 'อาคารเพิ่มมาก (เกิน 8 จุด)',
                  'เมืองหนาแน่นอยู่แล้ว (คงเดิม)']
+
+PROVINCE_TH = {
+    'Amnat Charoen': 'อำนาจเจริญ', 'Ang Thong': 'อ่างทอง', 'Bangkok': 'กรุงเทพมหานคร',
+    'Buriram': 'บุรีรัมย์', 'Chachoengsao': 'ฉะเชิงเทรา', 'Chainat': 'ชัยนาท',
+    'Chaiyaphum': 'ชัยภูมิ', 'Chanthaburi': 'จันทบุรี', 'Chiang Mai': 'เชียงใหม่',
+    'Chiang Rai': 'เชียงราย', 'Chonburi': 'ชลบุรี', 'Chumphon': 'ชุมพร',
+    'Kalasin': 'กาฬสินธุ์', 'Kampaeng Phet': 'กำแพงเพชร', 'Kanchanaburi': 'กาญจนบุรี',
+    'Khon Kaen': 'ขอนแก่น', 'Krabi': 'กระบี่', 'Lampang': 'ลำปาง', 'Lamphun': 'ลำพูน',
+    'Loei': 'เลย', 'Lopburi': 'ลพบุรี', 'Mae Hong Son': 'แม่ฮ่องสอน',
+    'Maha Sarakham': 'มหาสารคาม', 'Mukdahan': 'มุกดาหาร', 'Nakhon Nayok': 'นครนายก',
+    'Nakhon Pathom': 'นครปฐม', 'Nakhon Phanom': 'นครพนม', 'Nakhon Ratchasima': 'นครราชสีมา',
+    'Nakhon Sawan': 'นครสวรรค์', 'Nakhon Si Thammarat': 'นครศรีธรรมราช', 'Nan': 'น่าน',
+    'Narathiwat': 'นราธิวาส', 'Nong Bua Lamphu': 'หนองบัวลำภู', 'Nong Khai': 'หนองคาย',
+    'Nonthaburi': 'นนทบุรี', 'Pathum Thani': 'ปทุมธานี', 'Pattani': 'ปัตตานี',
+    'Phachinburi': 'ปราจีนบุรี', 'Phangnga': 'พังงา', 'Phatthalung': 'พัทลุง',
+    'Phayao': 'พะเยา', 'Phetchabun': 'เพชรบูรณ์', 'Phetchaburi': 'เพชรบุรี',
+    'Phichit': 'พิจิตร', 'Phitsanulok': 'พิษณุโลก', 'Phra Nakhon Si Ayudhya': 'พระนครศรีอยุธยา',
+    'Phrae': 'แพร่', 'Phuket': 'ภูเก็ต', 'Prachuap Khilikhan': 'ประจวบคีรีขันธ์',
+    'Ranong': 'ระนอง', 'Ratchaburi': 'ราชบุรี', 'Rayong': 'ระยอง', 'Roi Et': 'ร้อยเอ็ด',
+    'Sa Kaeo': 'สระแก้ว', 'Sakon Nakhon': 'สกลนคร', 'Samut Prakarn': 'สมุทรปราการ',
+    'Samut Sakhon': 'สมุทรสาคร', 'Samut Songkham': 'สมุทรสงคราม', 'Saraburi': 'สระบุรี',
+    'Satun': 'สตูล', 'Si Saket': 'ศรีสะเกษ', 'Singburi': 'สิงห์บุรี', 'Songkhla': 'สงขลา',
+    'Sukhothai': 'สุโขทัย', 'Suphanburi': 'สุพรรณบุรี', 'Surat Thani': 'สุราษฎร์ธานี',
+    'Surin': 'สุรินทร์', 'Tak': 'ตาก', 'Trad': 'ตราด', 'Trang': 'ตรัง',
+    'Ubon Ratchathani': 'อุบลราชธานี', 'Udon Thani': 'อุดรธานี', 'Uthai Thani': 'อุทัยธานี',
+    'Uttaradit': 'อุตรดิตถ์', 'Yala': 'ยะลา', 'Yasothon': 'ยโสธร',
+}
 
 _province_names = None
 _viirs_scale_cache = None
+
+
+# ---------------------------------------------------------------- แคชผลลัพธ์
+
+_cache = {}
+_cache_lock = threading.Lock()
+
+
+def cached(key, fn, ttl=6 * 3600):
+    now = time.time()
+    with _cache_lock:
+        hit = _cache.get(key)
+        if hit and now - hit[0] < ttl:
+            return hit[1]
+    val = fn()
+    with _cache_lock:
+        if len(_cache) > 400:
+            _cache.clear()
+        _cache[key] = (now, val)
+    return val
 
 
 # ---------------------------------------------------------------- ฤดู
@@ -95,7 +160,7 @@ def season_filter(col, season):
 # ---------------------------------------------------------------- อุณหภูมิ (Aqua / VIIRS)
 
 def aqua_day(img):
-    """MODIS Aqua รายวัน -> LST (°C) เฉพาะพิกเซลคุณภาพดีที่ถ่ายช่วง 12-14 น."""
+    """MODIS Aqua รายวัน -> LST (°C) ช่วง 12-14 น. ที่ความคลาดเคลื่อนไม่เกิน 2 K"""
     raw = img.select('LST_Day_1km')
     t = img.select('Day_view_time').multiply(0.1)          # ชั่วโมง (เวลาสุริยะท้องถิ่น)
     qc = img.select('QC_Day')
@@ -125,9 +190,9 @@ def viirs_scales():
                 lst_k = 0.02
             if (stats.get('View_Time') or 0) > 30:
                 time_k = 0.1
-            print('[VIIRS] ตรวจ scale:', stats, '->', (lst_k, time_k))
+            print('[VIIRS] ตรวจ scale:', stats, '->', (lst_k, time_k), flush=True)
         except Exception as e:
-            print('[VIIRS] ตรวจ scale ไม่สำเร็จ:', e)
+            print('[VIIRS] ตรวจ scale ไม่สำเร็จ:', e, flush=True)
         _viirs_scale_cache = (lst_k, time_k)
     return _viirs_scale_cache
 
@@ -161,28 +226,23 @@ def viirs_col(start, end, season='all'):
     return season_filter(col, season).map(viirs_day_factory())
 
 
-def aqua_proj():
-    """กริด 1 กม. (sinusoidal) ของ MODIS"""
-    return (ee.ImageCollection('MODIS/061/MYD11A1').first()
-            .select('LST_Day_1km').projection())
+def source_of(year):
+    return 'Aqua' if year <= AQUA_LAST_YEAR else 'VIIRS'
 
 
-def viirs_proj():
-    return (ee.ImageCollection('NASA/VIIRS/002/VNP21A1D').first()
-            .select('LST_1KM').projection())
-
-
-def lst_mean(year, season):
-    """LST เฉลี่ย (°C) ของปีและฤดูที่เลือก -> (ภาพ, กริด, ชื่อดาวเทียม)"""
+def lst_raw_mean(year, season):
+    """LST เฉลี่ย (°C) ของปี/ฤดู จากดาวเทียมของปีนั้น (ยังไม่ปรับเทียบ)"""
     s, e = f'{year}-01-01', f'{year + 1}-01-01'
-    if year <= AQUA_LAST_YEAR:
-        proj, col, source = aqua_proj(), aqua_col(s, e, season), 'Aqua'
-    else:
-        proj, col, source = viirs_proj(), viirs_col(s, e, season), 'VIIRS'
-    mean = ee.Image(ee.Algorithms.If(
-        col.size().gt(0), col.mean(),
-        ee.Image.constant(0).rename('LST').updateMask(0)))
-    return mean.setDefaultProjection(proj), proj, source
+    col = aqua_col(s, e, season) if year <= AQUA_LAST_YEAR else viirs_col(s, e, season)
+    empty = ee.Image.constant(0).rename('LST').updateMask(0)
+    return ee.Image(ee.Algorithms.If(col.size().gt(0), col.mean(), empty)).rename('LST')
+
+
+def vbias(season):
+    """ส่วนต่าง VIIRS − Aqua รายพิกเซล ในช่วงที่วัดซ้อนกัน"""
+    s, e = f'{BIAS_YEARS[0]}-01-01', f'{BIAS_YEARS[1] + 1}-01-01'
+    return (viirs_col(s, e, season).mean()
+            .subtract(aqua_col(s, e, season).mean()).rename('VB'))
 
 
 def lst_level(lst):
@@ -194,10 +254,16 @@ def lst_level(lst):
     return level
 
 
-# ---------------------------------------------------------------- พื้นผิว (Dynamic World)
+# ---------------------------------------------------------------- พื้นผิว / ประชากร
 
 def dw_year_of(year):
     return max(DW_FIRST_YEAR, min(year, LAST_YEAR))
+
+
+def pop_epoch_of(year):
+    """GHSL มีข้อมูลทุก 5 ปี ใช้ปีที่ใกล้ที่สุด"""
+    e = int(round(year / 5.0)) * 5
+    return max(POP_EPOCHS[0], min(POP_EPOCHS[-1], e))
 
 
 def dw_mean(year, region):
@@ -218,19 +284,24 @@ def dw_mean(year, region):
     ])
 
 
-def dw_grid(year, region, proj):
-    """เฉลี่ยพื้นผิวให้เป็นช่อง 1 กม. (ผ่านขั้น 100 ม. เพื่อให้คำนวณเร็ว)"""
-    m100 = dw_mean(year, region).reproject(crs='EPSG:4326', scale=100)
-    return (m100.reduceResolution(reducer=ee.Reducer.mean(), maxPixels=1024)
-            .reproject(proj))
+def dw_agg(year, region):
+    """พื้นผิวเฉลี่ยที่พร้อมรวมเป็นช่อง 1 กม. (ขั้นกลาง 300 ม. อ่านจาก pyramid แบบเฉลี่ย)"""
+    return (dw_mean(year, region).reproject(crs='EPSG:4326', scale=300)
+            .reduceResolution(reducer=ee.Reducer.mean(), maxPixels=1024))
 
 
-# ---------------------------------------------------------------- สิ่งปลูกสร้างย้อนหลัง / ประชากร (GHSL)
+def worldcover_open():
+    """ที่โล่ง 10 ม. จาก ESA WorldCover 2021: พุ่มไม้ ทุ่งหญ้า ดินเปล่า"""
+    wc = ee.ImageCollection('ESA/WorldCover/v200').first().select('Map')
+    out = None
+    for c in OPEN_CLASSES:
+        out = wc.eq(c) if out is None else out.Or(wc.eq(c))
+    return out.rename('OPEN')
 
-def pop_epoch_of(year):
-    """GHSL มีข้อมูลทุก 5 ปี ใช้ปีที่ใกล้ที่สุดในช่วง 2000-2020"""
-    e = int(round(year / 5.0)) * 5
-    return max(2000, min(2020, e))
+
+def open_agg():
+    return (worldcover_open().reproject(crs='EPSG:4326', scale=30)
+            .reduceResolution(reducer=ee.Reducer.mean(), maxPixels=1024).rename('OPEN'))
 
 
 def built_pct(epoch):
@@ -245,25 +316,166 @@ def pop_density(epoch):
             .select('population_count').multiply(100).rename('DENS'))
 
 
-def to_grid(img, proj):
-    """รวมภาพ 100 ม. ให้เป็นช่อง 1 กม. บนกริดเดียวกับ LST"""
-    return (img.reduceResolution(reducer=ee.Reducer.mean(), maxPixels=1024)
-            .reproject(proj))
+def mean_agg(img):
+    return img.reduceResolution(reducer=ee.Reducer.mean(), maxPixels=1024)
 
 
-# ---------------------------------------------------------------- ชั้นข้อมูลบนกริด 1 กม.
+# ---------------------------------------------------------------- คำนวณล่วงหน้า (assets)
 
-def grid_layers(year, season, region):
-    lst, proj, source = lst_mean(year, season)
-    dwy = dw_year_of(year)
-    epoch = pop_epoch_of(year)
-    cover = dw_grid(dwy, region, proj)
-    dens = to_grid(pop_density(epoch), proj)
+def needed_assets():
+    names = ['static', 'vbias']
+    names += [f'lst_{y}' for y in range(FIRST_YEAR, LAST_YEAR + 1)]
+    names += [f'dw_{y}' for y in range(DW_FIRST_YEAR, LAST_YEAR + 1)]
+    return names
+
+
+def export_region():
+    return (ee.FeatureCollection('FAO/GAUL/2015/level0')
+            .filter(ee.Filter.eq('ADM0_NAME', 'Thailand'))
+            .geometry().simplify(2000).buffer(5000))
+
+
+def build_asset(name):
+    if name == 'static':
+        bands = [open_agg()]
+        for e in POP_EPOCHS:
+            bands.append(mean_agg(built_pct(e)).rename(f'GB{e}'))
+            bands.append(mean_agg(pop_density(e)).rename(f'DENS{e}'))
+        return ee.Image.cat(bands).toFloat()
+    if name == 'vbias':
+        return ee.Image.cat([vbias(s).rename(f'VB_{s}') for s in SEASONS]).toFloat()
+    kind, year = name.split('_')
+    year = int(year)
+    if kind == 'lst':
+        return ee.Image.cat([lst_raw_mean(year, s).rename(f'LST_{s}') for s in SEASONS]).toFloat()
+    if kind == 'dw':
+        return dw_agg(year, export_region()).toFloat()
+    raise ValueError(name)
+
+
+_assets = {'t': 0, 'ids': set()}
+_pre = {'last_run': 0, 'started': [], 'error': None, 'running': False}
+
+
+def existing_assets(force=False):
+    if force or time.time() - _assets['t'] > 120:
+        try:
+            res = ee.data.listAssets({'parent': ASSET_FOLDER})
+            ids = set()
+            for a in res.get('assets', []):
+                aid = a.get('id') or a.get('name') or ''
+                ids.add(aid.rsplit('/', 1)[-1])
+            _assets['ids'] = ids
+        except Exception:
+            _assets['ids'] = set()
+        _assets['t'] = time.time()
+    return _assets['ids']
+
+
+def assets_ready(names):
+    have = existing_assets()
+    return all(n in have for n in names)
+
+
+def ee_tasks():
+    out = []
+    try:
+        for op in ee.data.listOperations():
+            md = op.get('metadata', {})
+            out.append({'desc': md.get('description', ''), 'state': md.get('state', ''),
+                        'error': (op.get('error') or {}).get('message')})
+    except Exception:
+        try:
+            for t in ee.data.getTaskList():
+                out.append({'desc': t.get('description', ''), 'state': t.get('state', ''),
+                            'error': t.get('error_message')})
+        except Exception as e:
+            out.append({'desc': '', 'state': 'LIST_ERROR', 'error': str(e)})
+    return [t for t in out if t['desc'].startswith(TASK_PREFIX)]
+
+
+def ensure_folder():
+    try:
+        ee.data.getAsset(ASSET_FOLDER)
+    except Exception:
+        try:
+            ee.data.createFolder(ASSET_FOLDER)
+        except AttributeError:
+            ee.data.createAsset({'type': 'FOLDER'}, ASSET_FOLDER)
+
+
+def ensure_precompute():
+    """สั่ง export ชั้นข้อมูลที่ยังไม่มี (ไม่สั่งซ้ำถ้ากำลังทำอยู่)"""
+    if _pre['running']:
+        return
+    _pre['running'] = True
+    _pre['last_run'] = time.time()
+    try:
+        ensure_folder()
+        have = existing_assets(force=True)
+        active = {t['desc'] for t in ee_tasks()
+                  if t['state'] in ('PENDING', 'RUNNING', 'READY')}
+        region = export_region()
+        for name in needed_assets():
+            desc = TASK_PREFIX + name
+            if name in have or desc in active:
+                continue
+            task = ee.batch.Export.image.toAsset(
+                image=build_asset(name), description=desc,
+                assetId=f'{ASSET_FOLDER}/{name}', region=region,
+                crs=GRID_CRS, crsTransform=GRID_TRANSFORM, maxPixels=1e10,
+                pyramidingPolicy={'.default': 'mean'})
+            task.start()
+            _pre['started'].append(name)
+            print('[precompute] started', name, flush=True)
+        _pre['error'] = None
+    except Exception as e:
+        _pre['error'] = repr(e)
+        print('[precompute] error', repr(e), flush=True)
+    finally:
+        _pre['running'] = False
+
+
+def maybe_precompute():
+    if PRECOMPUTE and time.time() - _pre['last_run'] > 1800:
+        threading.Thread(target=ensure_precompute, daemon=True).start()
+
+
+def A(name):
+    return ee.Image(f'{ASSET_FOLDER}/{name}')
+
+
+# ---------------------------------------------------------------- ชั้นข้อมูลบนกริด
+
+def layers_fast(year):
+    """ข้อมูลของปีนี้คำนวณล่วงหน้าครบแล้วหรือยัง"""
+    need = ['static', f'lst_{year}', f'dw_{dw_year_of(year)}']
+    if source_of(year) == 'VIIRS':
+        need.append('vbias')
+    return assets_ready(need)
+
+
+def layers(year, season, region):
+    dwy, epoch, source = dw_year_of(year), pop_epoch_of(year), source_of(year)
+    fast = layers_fast(year)
+    if fast:
+        st = A('static')
+        lst = A(f'lst_{year}').select(f'LST_{season}').rename('LST')
+        if source == 'VIIRS':
+            lst = lst.subtract(A('vbias').select(f'VB_{season}')).rename('LST')
+        cover = A(f'dw_{dwy}')
+        dens = st.select(f'DENS{epoch}').rename('DENS')
+        open_ = st.select('OPEN')
+    else:
+        lst = lst_raw_mean(year, season)
+        if source == 'VIIRS':
+            lst = lst.subtract(vbias(season)).rename('LST')
+        cover = dw_agg(dwy, region).reproject(GRID)
+        dens = mean_agg(pop_density(epoch)).reproject(GRID)
+        open_ = open_agg().reproject(GRID)
     green = cover.select('TREES').add(cover.select('GRASS')).rename('GREEN')
-    open_ = cover.select('GRASS').add(cover.select('BARE')).rename('OPEN')
-    return {'lst': lst, 'proj': proj, 'source': source, 'dw_year': dwy,
-            'pop_epoch': epoch, 'cover': cover, 'dens': dens,
-            'green': green, 'open': open_}
+    return {'lst': lst, 'source': source, 'dw_year': dwy, 'pop_epoch': epoch,
+            'cover': cover, 'dens': dens, 'green': green, 'open': open_, 'fast': fast}
 
 
 def priority(L):
@@ -286,9 +498,21 @@ def bin_index(img, edges):
     return idx.toInt()
 
 
-def rr(img, reducer, region, proj):
-    return img.reduceRegion(reducer=reducer, geometry=region, crs=proj,
-                            scale=1000, bestEffort=True, maxPixels=1e9)
+def rr(img, reducer, region):
+    return img.reduceRegion(reducer=reducer, geometry=region, crs=GRID_CRS,
+                            crsTransform=GRID_TRANSFORM, maxPixels=1e9, tileScale=4)
+
+
+def grouped_rows(groups, labels):
+    found = {int(r['g']): r for r in (groups or [])}
+    return [{'label': lab,
+             'mean': found.get(i, {}).get('mean'),
+             'count': int(found.get(i, {}).get('count') or 0)}
+            for i, lab in enumerate(labels)]
+
+
+MEAN_COUNT = (ee.Reducer.mean()
+              .combine(reducer2=ee.Reducer.count(), sharedInputs=True))
 
 
 # ---------------------------------------------------------------- พื้นที่โฟกัส
@@ -318,7 +542,13 @@ def build_region(data):
     if g:
         if g.get('type') not in ('Polygon', 'MultiPolygon'):
             raise ValueError('รูปทรงไม่ถูกต้อง')
-        return ee.Geometry(g)
+        geom = ee.Geometry(g)
+        area = cached('area|' + json.dumps(g, sort_keys=True),
+                      lambda: geom.area(maxError=100).divide(1e6).getInfo())
+        if area > MAX_AREA_KM2:
+            raise ValueError(f'พื้นที่ที่วาดใหญ่เกินไป ({area:,.0f} ตร.กม.) '
+                             f'วาดให้ไม่เกิน {MAX_AREA_KM2:,} ตร.กม. หรือเลือกเป็นจังหวัดแทน')
+        return geom
     lat = float(data['lat'])
     lon = float(data['lon'])
     return ee.Geometry.Point([lon, lat]).buffer(POINT_RADIUS_M)
@@ -338,48 +568,86 @@ def read_season(d):
     return season
 
 
+def region_key(data):
+    return json.dumps({k: data.get(k) for k in ('province', 'geometry', 'lat', 'lon')},
+                      sort_keys=True)
+
+
 def error_response(e):
+    if isinstance(e, ValueError) and str(e) and not str(e).isascii():
+        return jsonify({'error': str(e)}), 400
     if isinstance(e, (ValueError, KeyError, TypeError)):
         return jsonify({'error': 'ข้อมูลที่ส่งมาไม่ถูกต้อง: ' + str(e)}), 400
-    print('[ERROR]', repr(e))
-    return jsonify({'error': str(e)}), 500
+    msg = str(e)
+    print('[ERROR]', repr(e), flush=True)
+    low = msg.lower()
+    if 'memory limit' in low or 'timed out' in low or 'too many' in low or 'capacity' in low:
+        msg = ('พื้นที่นี้คำนวณหนักเกินไปในตอนนี้ ลองพื้นที่เล็กลง หรือรอสักพัก '
+               '(ระบบกำลังเตรียมข้อมูลล่วงหน้า เมื่อเสร็จจะเร็วขึ้นมาก)')
+    return jsonify({'error': msg}), 500
 
 
 # ---------------------------------------------------------------- หน้าเว็บ / API
 
 @app.route('/')
 def index():
+    maybe_precompute()
     return render_template('index.html')
+
+
+def precompute_progress():
+    need = needed_assets()
+    have = existing_assets()
+    return {'ready': sum(1 for n in need if n in have), 'total': len(need)}
 
 
 @app.route('/api/config')
 def config():
+    maybe_precompute()
     return jsonify({
-        'version': 3,
+        'version': 4,
         'first_year': FIRST_YEAR, 'last_year': LAST_YEAR,
         'default_year': DEFAULT_YEAR, 'aqua_last_year': AQUA_LAST_YEAR,
-        'dw_first_year': DW_FIRST_YEAR,
+        'dw_first_year': DW_FIRST_YEAR, 'bias_years': BIAS_YEARS,
         'lst_breaks': LST_BREAKS, 'lst_palette': LST_PALETTE,
         'hot': HOT, 'very_hot': VERY_HOT,
         'hot_level': LST_BREAKS.index(VERY_HOT) + 1,
         'pop_any': POP_ANY, 'pop_dense': POP_DENSE,
         'green_low': GREEN_LOW, 'open_min': OPEN_MIN,
         'prio_colors': PRIO_COLORS, 'seasons': SEASONS,
-        'point_radius_m': POINT_RADIUS_M,
+        'point_radius_m': POINT_RADIUS_M, 'max_area_km2': MAX_AREA_KM2,
         'built_labels': BUILT_LABELS, 'green_labels': GREEN_LABELS,
         'change_labels': CHANGE_LABELS,
+        'precompute': precompute_progress(),
     })
+
+
+@app.route('/api/status')
+def status():
+    """สถานะการคำนวณล่วงหน้า (ไว้ตรวจสอบ)"""
+    try:
+        have = existing_assets(force=True)
+        need = needed_assets()
+        return jsonify({
+            'folder': ASSET_FOLDER, 'enabled': PRECOMPUTE,
+            'ready': sorted(n for n in need if n in have),
+            'missing': [n for n in need if n not in have],
+            'tasks': ee_tasks()[:80],
+            'started_this_run': _pre['started'], 'error': _pre['error'],
+        })
+    except Exception as e:
+        return error_response(e)
 
 
 @app.route('/api/coverage')
 def coverage():
     try:
-        latest = (ee.ImageCollection('NASA/VIIRS/002/VNP21A1D')
-                  .aggregate_max('system:time_start'))
-        viirs_last = ee.Date(latest).format('YYYY-MM-dd').getInfo()
-        lst_k, time_k = viirs_scales()
-        return jsonify({'viirs_last': viirs_last,
-                        'viirs_scale_lst': lst_k, 'viirs_scale_time': time_k})
+        def calc():
+            latest = (ee.ImageCollection('NASA/VIIRS/002/VNP21A1D')
+                      .aggregate_max('system:time_start'))
+            return ee.Date(latest).format('YYYY-MM-dd').getInfo()
+        return jsonify({'viirs_last': cached('viirs_last', calc, ttl=12 * 3600),
+                        'precompute': precompute_progress()})
     except Exception as e:
         return error_response(e)
 
@@ -391,49 +659,59 @@ def tiles():
         layer = request.args.get('layer', 'priority')
         year = read_year(request.args)
         season = read_season(request.args)
-        out = {'layer': layer, 'year': year, 'season': season}
-
-        if layer == 'lst':
-            lst, _, out['source'] = lst_mean(year, season)
-            img = lst_level(lst)
-            vis = {'min': 0, 'max': len(LST_BREAKS), 'palette': LST_PALETTE}
-
-        elif layer == 'priority':
-            L = grid_layers(year, season, THAILAND)
-            out.update(source=L['source'], dw_year=L['dw_year'], pop_epoch=L['pop_epoch'])
-            img = priority(L).selfMask()
-            vis = {'min': 1, 'max': 3, 'palette': PRIO_COLORS}
-
-        elif layer in ('green', 'open', 'built'):
-            dwy = dw_year_of(year)
-            out['dw_year'] = dwy
-            c = dw_mean(dwy, THAILAND)
-            if layer == 'green':
-                g = c.select('TREES').add(c.select('GRASS'))
-                img = g.updateMask(g.gte(0.2))
-                vis = {'min': 0.2, 'max': 0.9,
-                       'palette': ['#d9f0a3', '#78c679', '#238443', '#004529']}
-            elif layer == 'open':
-                o = c.select('GRASS').add(c.select('BARE'))
-                lived = to_grid(pop_density(pop_epoch_of(year)), aqua_proj()).gte(POP_ANY)
-                img = o.updateMask(o.gte(0.5).And(lived))
-                vis = {'min': 0.5, 'max': 1, 'palette': ['#f3d27a', '#b5651d']}
-            else:
-                b = c.select('BUILT')
-                img = b.updateMask(b.gte(0.2))
-                vis = {'min': 0.2, 'max': 0.9,
-                       'palette': ['#dadaeb', '#9e9ac8', '#6a51a3', '#3f007d']}
-
-        elif layer == 'built_change':
-            d = built_pct(2020).subtract(built_pct(2005))
-            img = d.updateMask(d.gt(2))
-            vis = {'min': 2, 'max': 40,
-                   'palette': ['#fde0ef', '#f1b6da', '#de77ae', '#c51b7d', '#8e0152']}
-        else:
+        if layer not in ('lst', 'priority', 'green', 'open', 'built', 'built_change'):
             raise ValueError('ไม่รู้จักชั้นข้อมูลนี้')
 
-        out['url'] = img.getMapId(vis)['tile_fetcher'].url_format
-        return jsonify(out)
+        def calc():
+            out = {'layer': layer, 'year': year, 'season': season}
+            if layer in ('lst', 'priority'):
+                L = layers(year, season, THAILAND)
+                out.update(source=L['source'], fast=L['fast'])
+                if layer == 'lst':
+                    img = lst_level(L['lst'])
+                    vis = {'min': 0, 'max': len(LST_BREAKS), 'palette': LST_PALETTE}
+                    out['min_zoom'] = 5
+                else:
+                    out.update(dw_year=L['dw_year'], pop_epoch=L['pop_epoch'])
+                    img = priority(L).selfMask()
+                    vis = {'min': 1, 'max': 3, 'palette': PRIO_COLORS}
+                    out['min_zoom'] = 5 if L['fast'] else 8
+            elif layer in ('green', 'built'):
+                dwy = dw_year_of(year)
+                out['dw_year'] = dwy
+                c = dw_mean(dwy, THAILAND)
+                if layer == 'green':
+                    g = c.select('TREES').add(c.select('GRASS'))
+                    img = g.updateMask(g.gte(0.2))
+                    vis = {'min': 0.2, 'max': 0.9,
+                           'palette': ['#d9f0a3', '#78c679', '#238443', '#004529']}
+                else:
+                    b = c.select('BUILT')
+                    img = b.updateMask(b.gte(0.2))
+                    vis = {'min': 0.2, 'max': 0.9,
+                           'palette': ['#dadaeb', '#9e9ac8', '#6a51a3', '#3f007d']}
+                out['min_zoom'] = 9
+            elif layer == 'open':
+                epoch = pop_epoch_of(year)
+                if assets_ready(['static']):
+                    dens = A('static').select(f'DENS{epoch}')
+                else:
+                    dens = mean_agg(pop_density(epoch)).reproject(GRID)
+                o = worldcover_open()
+                img = o.selfMask().updateMask(dens.gte(POP_ANY))
+                vis = {'min': 0, 'max': 1, 'palette': ['#c8873a', '#c8873a']}
+                out['min_zoom'] = 10
+            else:  # built_change
+                d = built_pct(2020).subtract(built_pct(2005))
+                img = d.updateMask(d.gt(2))
+                vis = {'min': 2, 'max': 40,
+                       'palette': ['#fde0ef', '#f1b6da', '#de77ae', '#c51b7d', '#8e0152']}
+                out['min_zoom'] = 6
+            out['url'] = img.getMapId(vis)['tile_fetcher'].url_format
+            return out
+
+        fast_flag = layers_fast(year)
+        return jsonify(cached(f'tiles|{layer}|{year}|{season}|{fast_flag}', calc, ttl=3600))
     except Exception as e:
         return error_response(e)
 
@@ -441,7 +719,8 @@ def tiles():
 @app.route('/api/provinces')
 def provinces():
     try:
-        return jsonify(get_province_names())
+        names = get_province_names()
+        return jsonify([{'en': n, 'th': PROVINCE_TH.get(n, n)} for n in names])
     except Exception as e:
         return error_response(e)
 
@@ -452,10 +731,11 @@ def province_shape():
         name = request.args.get('name', '')
         if name not in get_province_names():
             return jsonify({'error': 'ไม่พบจังหวัดนี้'}), 404
-        geom = (provinces_fc()
-                .filter(ee.Filter.eq('ADM1_NAME', name))
-                .geometry().simplify(500))
-        return jsonify(geom.getInfo())
+
+        def calc():
+            return (provinces_fc().filter(ee.Filter.eq('ADM1_NAME', name))
+                    .geometry().simplify(500).getInfo())
+        return jsonify(cached('shape|' + name, calc, ttl=24 * 3600))
     except Exception as e:
         return error_response(e)
 
@@ -467,56 +747,57 @@ def summary():
         data = request.get_json(force=True)
         year, season = read_year(data), read_season(data)
         region = build_region(data)
-        L = grid_layers(year, season, region)
-        proj = L['proj']
 
-        km2 = ee.Image.pixelArea().divide(1e6)
-        people = L['dens'].multiply(km2).rename('PEOPLE')
-        open_km2 = L['open'].multiply(km2).rename('OPENKM2')
-        cls = priority(L)
+        def calc():
+            L = layers(year, season, region)
+            km2 = ee.Image.pixelArea().divide(1e6)
+            people = L['dens'].multiply(km2).rename('PEOPLE')
+            open_km2 = L['open'].multiply(km2).rename('OPENKM2')
+            cls = priority(L)
+            lived = L['dens'].gte(POP_ANY)
 
-        prio_reducer = (ee.Reducer.sum()
-                        .combine(reducer2=ee.Reducer.sum(), outputPrefix='open_')
-                        .combine(reducer2=ee.Reducer.sum(), outputPrefix='area_')
-                        .group(groupField=3, groupName='g'))
-        prio_stack = (people.addBands(open_km2)
-                      .addBands(km2.rename('AREA')).addBands(cls))
-        expo_stack = people.addBands(lst_level(L['lst']).toInt().rename('g'))
-        lived = L['dens'].gte(POP_ANY)
+            prio_reducer = (ee.Reducer.sum()
+                            .combine(reducer2=ee.Reducer.sum(), outputPrefix='open_')
+                            .combine(reducer2=ee.Reducer.sum(), outputPrefix='area_')
+                            .group(groupField=3, groupName='g'))
+            prio_stack = (people.addBands(open_km2)
+                          .addBands(km2.rename('AREA')).addBands(cls))
+            expo_stack = people.addBands(lst_level(L['lst']).toInt().rename('g'))
 
-        res = ee.Dictionary({
-            'prio': rr(prio_stack, prio_reducer, region, proj).get('groups'),
-            'expo': rr(expo_stack, ee.Reducer.sum().group(groupField=1, groupName='g'),
-                       region, proj).get('groups'),
-            'cover_all': rr(L['cover'], ee.Reducer.mean(), region, proj),
-            'cover_lived': rr(L['cover'].updateMask(lived), ee.Reducer.mean(),
-                              region, proj),
-            'pop_total': rr(people, ee.Reducer.sum(), region, proj).get('PEOPLE'),
-            'lst_lived': rr(L['lst'].updateMask(lived), ee.Reducer.mean(),
-                            region, proj).get('LST'),
-            'area_km2': region.area(maxError=1).divide(1e6),
-        }).getInfo()
+            res = ee.Dictionary({
+                'prio': rr(prio_stack, prio_reducer, region).get('groups'),
+                'expo': rr(expo_stack, ee.Reducer.sum().group(groupField=1, groupName='g'),
+                           region).get('groups'),
+                'cover_all': rr(L['cover'], ee.Reducer.mean(), region),
+                'cover_lived': rr(L['cover'].updateMask(lived), ee.Reducer.mean(), region),
+                'pop_total': rr(people, ee.Reducer.sum(), region).get('PEOPLE'),
+                'lst_lived': rr(L['lst'].updateMask(lived), ee.Reducer.mean(),
+                                region).get('LST'),
+                'area_km2': region.area(maxError=100).divide(1e6),
+            }).getInfo()
 
-        found = {int(r['g']): r for r in (res.get('prio') or [])}
-        prio = [{'cls': c,
-                 'people': found.get(c, {}).get('sum') or 0,
-                 'open_km2': found.get(c, {}).get('open_sum') or 0,
-                 'area_km2': found.get(c, {}).get('area_sum') or 0}
-                for c in range(4)]
-        efound = {int(r['g']): r.get('sum') or 0 for r in (res.get('expo') or [])}
-        expo = [{'level': i, 'people': efound.get(i, 0)}
-                for i in range(len(LST_BREAKS) + 1)]
+            found = {int(r['g']): r for r in (res.get('prio') or [])}
+            prio = [{'cls': c,
+                     'people': found.get(c, {}).get('sum') or 0,
+                     'open_km2': found.get(c, {}).get('open_sum') or 0,
+                     'area_km2': found.get(c, {}).get('area_sum') or 0}
+                    for c in range(4)]
+            efound = {int(r['g']): r.get('sum') or 0 for r in (res.get('expo') or [])}
+            expo = [{'level': i, 'people': efound.get(i, 0)}
+                    for i in range(len(LST_BREAKS) + 1)]
+            return {
+                'year': year, 'season': season, 'source': L['source'],
+                'dw_year': L['dw_year'], 'pop_epoch': L['pop_epoch'], 'fast': L['fast'],
+                'area_km2': res.get('area_km2'),
+                'cover_all': res.get('cover_all') or {},
+                'cover_lived': res.get('cover_lived') or {},
+                'pop_total': res.get('pop_total') or 0,
+                'lst_lived': res.get('lst_lived'),
+                'prio': prio, 'expo': expo,
+            }
 
-        return jsonify({
-            'year': year, 'season': season, 'source': L['source'],
-            'dw_year': L['dw_year'], 'pop_epoch': L['pop_epoch'],
-            'area_km2': res.get('area_km2'),
-            'cover_all': res.get('cover_all') or {},
-            'cover_lived': res.get('cover_lived') or {},
-            'pop_total': res.get('pop_total') or 0,
-            'lst_lived': res.get('lst_lived'),
-            'prio': prio, 'expo': expo,
-        })
+        fast_flag = layers_fast(year)
+        return jsonify(cached(f'summary|{region_key(data)}|{year}|{season}|{fast_flag}', calc))
     except Exception as e:
         return error_response(e)
 
@@ -528,102 +809,111 @@ def bins():
         data = request.get_json(force=True)
         year, season = read_year(data), read_season(data)
         region = build_region(data)
-        L = grid_layers(year, season, region)
-        proj = L['proj']
 
-        lst = L['lst'].updateMask(L['dens'].gte(POP_ANY))
-        reducer = (ee.Reducer.mean()
-                   .combine(reducer2=ee.Reducer.count(), sharedInputs=True)
-                   .group(groupField=1, groupName='g'))
-        built_idx = bin_index(L['cover'].select('BUILT'), BUILT_EDGES).rename('g')
-        green_idx = bin_index(L['green'], GREEN_EDGES).rename('g')
+        def calc():
+            L = layers(year, season, region)
+            lst = L['lst'].updateMask(L['dens'].gte(POP_ANY))
+            reducer = MEAN_COUNT.group(groupField=1, groupName='g')
+            built_idx = bin_index(L['cover'].select('BUILT'), BUILT_EDGES).rename('g')
+            green_idx = bin_index(L['green'], GREEN_EDGES).rename('g')
+            res = ee.Dictionary({
+                'built': rr(lst.addBands(built_idx), reducer, region).get('groups'),
+                'green': rr(lst.addBands(green_idx), reducer, region).get('groups'),
+            }).getInfo()
+            return {'year': year, 'season': season, 'source': L['source'],
+                    'dw_year': L['dw_year'], 'fast': L['fast'],
+                    'built': grouped_rows(res.get('built'), BUILT_LABELS),
+                    'green': grouped_rows(res.get('green'), GREEN_LABELS)}
 
-        res = ee.Dictionary({
-            'built': rr(lst.addBands(built_idx), reducer, region, proj).get('groups'),
-            'green': rr(lst.addBands(green_idx), reducer, region, proj).get('groups'),
-        }).getInfo()
-
-        out = {'year': year, 'season': season, 'source': L['source'],
-               'dw_year': L['dw_year']}
-        for key, labels in (('built', BUILT_LABELS), ('green', GREEN_LABELS)):
-            found = {int(r['g']): r for r in (res.get(key) or [])}
-            out[key] = [{'label': lab,
-                         'mean': found.get(i, {}).get('mean'),
-                         'count': int(found.get(i, {}).get('count') or 0)}
-                        for i, lab in enumerate(labels)]
-        return jsonify(out)
+        fast_flag = layers_fast(year)
+        return jsonify(cached(f'bins|{region_key(data)}|{year}|{season}|{fast_flag}', calc))
     except Exception as e:
         return error_response(e)
 
 
+def lst_block(y0, y1, season, fast):
+    """LST เฉลี่ยของช่วงปี (Aqua)"""
+    if fast:
+        imgs = [A(f'lst_{y}').select(f'LST_{season}') for y in range(y0, y1 + 1)]
+        return ee.ImageCollection(imgs).mean().rename('LST')
+    return aqua_col(f'{y0}-01-01', f'{y1 + 1}-01-01', season).mean().rename('LST')
+
+
+def history_inputs(fast):
+    if fast:
+        st = A('static')
+        gb = {e: st.select(f'GB{e}').rename('BUILT') for e in POP_EPOCHS}
+        lived = st.select('DENS2020').gte(POP_ANY)
+    else:
+        gb = {e: mean_agg(built_pct(e)).reproject(GRID) for e in POP_EPOCHS}
+        lived = mean_agg(pop_density(2020)).reproject(GRID).gte(POP_ANY)
+    return gb, lived
+
+
+def history_fast():
+    return assets_ready(['static'] + [f'lst_{y}' for y in range(FIRST_YEAR, AQUA_LAST_YEAR + 1)])
+
+
 @app.route('/api/trend', methods=['POST'])
 def trend():
-    """ย้อนหลัง 20 ปี: สัดส่วนสิ่งปลูกสร้าง vs อุณหภูมิ ทุก 5 ปี (เฉพาะย่านที่มีคนอยู่)"""
+    """ย้อนหลัง 20 ปี: สัดส่วนอาคาร vs อุณหภูมิ ทุก 5 ปี (เฉพาะย่านที่มีคนอยู่)"""
     try:
         data = request.get_json(force=True)
         season = read_season(data)
         region = build_region(data)
-        proj = aqua_proj()
-        lived = to_grid(pop_density(2020), proj).gte(POP_ANY)
+        fast = history_fast()
 
-        out = {}
-        for epoch, y0, y1 in BLOCKS:
-            lst = (aqua_col(f'{y0}-01-01', f'{y1 + 1}-01-01', season)
-                   .mean().setDefaultProjection(proj))
-            built = to_grid(built_pct(epoch), proj)
-            img = lst.addBands(built).updateMask(lst.mask().And(lived))
-            out[str(epoch)] = rr(img, ee.Reducer.mean(), region, proj)
-        res = ee.Dictionary(out).getInfo()
+        def calc():
+            gb, lived = history_inputs(fast)
+            out = {}
+            for epoch, y0, y1 in BLOCKS:
+                lst = lst_block(y0, y1, season, fast)
+                img = lst.addBands(gb[epoch]).updateMask(lst.mask().And(lived))
+                out[str(epoch)] = rr(img, ee.Reducer.mean(), region)
+            res = ee.Dictionary(out).getInfo()
+            rows = [{'epoch': e, 'label': BLOCK_LABELS[e],
+                     'lst': (res.get(str(e)) or {}).get('LST'),
+                     'built': (res.get(str(e)) or {}).get('BUILT')}
+                    for e, _, _ in BLOCKS]
+            return {'season': season, 'rows': rows, 'fast': fast}
 
-        rows = [{'epoch': e, 'label': BLOCK_LABELS[e],
-                 'lst': (res.get(str(e)) or {}).get('LST'),
-                 'built': (res.get(str(e)) or {}).get('BUILT')}
-                for e, _, _ in BLOCKS]
-        return jsonify({'season': season, 'rows': rows})
+        return jsonify(cached(f'trend|{region_key(data)}|{season}|{fast}', calc))
     except Exception as e:
         return error_response(e)
 
 
 @app.route('/api/change', methods=['POST'])
 def change():
-    """อุณหภูมิที่เปลี่ยนไป (2018-22 เทียบ 2003-07) แยกตามระดับที่สิ่งปลูกสร้างเพิ่ม (2005 -> 2020)"""
+    """อุณหภูมิที่เปลี่ยนไป (2018-22 เทียบ 2003-07) แยกตามระดับที่อาคารเพิ่ม (2005 -> 2020)"""
     try:
         data = request.get_json(force=True)
         season = read_season(data)
         region = build_region(data)
-        proj = aqua_proj()
+        fast = history_fast()
 
-        lst_a = aqua_col('2003-01-01', '2008-01-01', season).mean().setDefaultProjection(proj)
-        lst_b = aqua_col('2018-01-01', '2023-01-01', season).mean().setDefaultProjection(proj)
-        d_lst = lst_b.subtract(lst_a).rename('DLST')
+        def calc():
+            gb, _ = history_inputs(fast)
+            d_lst = (lst_block(2018, 2022, season, fast)
+                     .subtract(lst_block(2003, 2007, season, fast)).rename('DLST'))
+            b05, b20 = gb[2005], gb[2020]
+            d_b = b20.subtract(b05)
+            cls = ee.Image(-1)
+            cls = cls.where(d_b.lte(1).And(b05.lt(5)), 0)      # กลุ่มเทียบ
+            cls = cls.where(d_b.gt(1).And(d_b.lte(4)), 1)
+            cls = cls.where(d_b.gt(4).And(d_b.lte(8)), 2)
+            cls = cls.where(d_b.gt(8), 3)
+            cls = cls.where(d_b.lte(1).And(b05.gte(25)), 4)    # เมืองหนาแน่นอยู่แล้ว
+            cls = cls.updateMask(cls.gte(0)).rename('g').toInt()
+            groups = ee.List(rr(d_lst.addBands(cls), MEAN_COUNT.group(groupField=1, groupName='g'),
+                                region).get('groups')).getInfo()
+            return {'season': season, 'rows': grouped_rows(groups, CHANGE_LABELS), 'fast': fast}
 
-        b05 = to_grid(built_pct(2005), proj)
-        b20 = to_grid(built_pct(2020), proj)
-        d_b = b20.subtract(b05)
-
-        cls = ee.Image(-1)
-        cls = cls.where(d_b.lte(2).And(b05.lt(10)), 0)     # กลุ่มเทียบ
-        cls = cls.where(d_b.gt(2).And(d_b.lte(10)), 1)
-        cls = cls.where(d_b.gt(10).And(d_b.lte(25)), 2)
-        cls = cls.where(d_b.gt(25), 3)
-        cls = cls.where(d_b.lte(2).And(b05.gte(60)), 4)    # เมืองหนาแน่นอยู่แล้ว
-        cls = cls.updateMask(cls.gte(0)).rename('g').toInt()
-
-        reducer = (ee.Reducer.mean()
-                   .combine(reducer2=ee.Reducer.count(), sharedInputs=True)
-                   .group(groupField=1, groupName='g'))
-        groups = ee.List(rr(d_lst.addBands(cls), reducer, region, proj)
-                         .get('groups')).getInfo() or []
-        found = {int(r['g']): r for r in groups}
-
-        rows = [{'label': lab,
-                 'mean': found.get(i, {}).get('mean'),
-                 'count': int(found.get(i, {}).get('count') or 0)}
-                for i, lab in enumerate(CHANGE_LABELS)]
-        return jsonify({'season': season, 'rows': rows})
+        return jsonify(cached(f'change|{region_key(data)}|{season}|{fast}', calc))
     except Exception as e:
         return error_response(e)
 
+
+maybe_precompute()
 
 if __name__ == '__main__':
     app.run(debug=True)
