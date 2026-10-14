@@ -1347,12 +1347,16 @@ function coverSection(d) {
   const other = Math.max(0, 1 - tot);
   const segs = COVER.map(([k, n, col]) => `<span style="width:${(v(k) * 100).toFixed(2)}%;background:${col}" title="${n} ${Math.round(v(k) * 100)}%"></span>`).join('') +
     (other > 0.005 ? `<span style="width:${(other * 100).toFixed(2)}%;background:#ddd6cb" title="อื่น ๆ ${Math.round(other * 100)}%"></span>` : '');
-  const keys = COVER.map(([k, n, col]) => `<span><i style="background:${col}"></i>${n} ${Math.round(v(k) * 100)}%</span>`).join('');
+  const keys = COVER.map(([k, n, col]) => `<span><i style="background:${col}"></i>${n} ${Math.round(v(k) * 100)}%</span>`).join('') +
+    (other > 0.005 ? `<span><i style="background:#ddd6cb"></i>อื่น ๆ ${Math.round(other * 100)}%</span>` : '');
   const tree = v('TREES') * 100;
+  const how = d.cover_method === 'prob'
+    ? 'ค่าเฉลี่ยความน่าจะเป็นของแต่ละประเภทตลอดปี (ชุดข้อมูลเดิม ระหว่างเตรียมชุดใหม่)'
+    : 'นับจากประเภทพื้นผิวที่พบบ่อยที่สุดของปีในแต่ละจุด แล้วรวมเป็นช่อง ≈1 กม.';
   return `<section><h3>พื้นผิว${scope}</h3><div class="stack">${segs}</div><div class="keys">${keys}</div>
     <div class="meter" aria-hidden="true"><div class="fill" style="width:${Math.min(100, tree).toFixed(1)}%"></div><div class="target" style="left:30%"><span>30%</span></div></div>
     <p class="lead" style="font-size:13.5px;margin-top:4px">ร่มไม้ (ต้นไม้) ${scope} <b>${Math.round(tree)}%</b> — หลัก 3-30-300 แนะนำอย่างน้อย 30%</p>
-    <p class="note" style="margin-top:2px">นับจากประเภทพื้นผิวที่พบบ่อยที่สุดของปีในแต่ละจุด 10 ม. · Dynamic World ปี ${esc(d.dw_year)}</p></section>`;
+    <p class="note" style="margin-top:2px">${how} · Dynamic World ปี ${esc(d.dw_year)}</p></section>`;
 }
 
 const NODATA_COLOR = '#d9d4cc';
@@ -1597,16 +1601,37 @@ function changeChartConfig(d, rng) {
     }
   };
 }
+// รวมสองกลุ่มเป็นกลุ่มเดียว (ค่าเฉลี่ยถ่วงน้ำหนัก และส่วนเบี่ยงเบนมาตรฐานรวมทั้งภายในและระหว่างกลุ่ม)
+function poolRows(a, b) {
+  const ok = r => r && isNum(r.mean) && r.count > 0;
+  if (!ok(a) || !ok(b)) return ok(a) ? a : ok(b) ? b : null;
+  const n = a.count + b.count, m = (a.count * a.mean + b.count * b.mean) / n;
+  if (!isNum(a.sd) || !isNum(b.sd) || n < 2) return { mean: m, count: n };
+  const ss = (a.count - 1) * a.sd * a.sd + (b.count - 1) * b.sd * b.sd + a.count * (a.mean - m) ** 2 + b.count * (b.mean - m) ** 2;
+  return { mean: m, count: n, sd: Math.sqrt(ss / (n - 1)) };
+}
 function changeSentence(d) {
   const rows = Array.isArray(d.rows) ? d.rows : [];
-  const c = rows[0], b = rows[3];
-  if (!c || !b || !isNum(c.mean) || !isNum(b.mean) || c.count < N_SENT || b.count < N_SENT) {
-    return `กลุ่มเทียบหรือกลุ่ม “อาคารเพิ่มมาก” มีไม่ถึง ${N_SENT} ช่อง จึงยังไม่สรุปผล`;
+  const c = rows[0];
+  let b = rows[3], what = 'ย่านที่อาคารเพิ่มมาก', pre = '';
+  const enough = r => r && isNum(r.mean) && r.count >= N_SENT;
+  // เมืองที่โตช้า (เช่น ขอนแก่น) กลุ่ม “อาคารเพิ่มมาก” มักมีช่องน้อย จึงรวมกับกลุ่มปานกลาง (อาคารเพิ่ม ≥ 4 จุด)
+  if (enough(c) && !enough(b)) {
+    const p = poolRows(rows[2], rows[3]);
+    if (enough(p)) {
+      pre = `กลุ่มอาคารเพิ่มมากมีไม่ถึง ${N_SENT} ช่อง จึงรวมกับกลุ่มปานกลาง (อาคารเพิ่ม ≥ 4 จุด รวม ${nf(p.count)} ช่อง): `;
+      b = p; what = 'ย่านที่อาคารเพิ่ม';
+    }
+  }
+  if (!enough(c) || !enough(b)) {
+    return `กลุ่มเทียบหรือกลุ่มที่อาคารเพิ่มมีไม่ถึง ${N_SENT} ช่อง จึงยังไม่สรุปผล`;
   }
   const diff = b.mean - c.mean;
   const sep = !overlaps(ciOf(b), ciOf(c));
-  return `ย่านที่อาคารเพิ่มมาก${b.mean >= 0 ? 'ร้อนขึ้น' : 'เย็นลง'} <b>${num(Math.abs(b.mean))} °C</b> ส่วนกลุ่มเทียบ${c.mean >= 0 ? 'ร้อนขึ้น' : 'เย็นลง'} ${num(Math.abs(c.mean))} °C ` +
-    `ส่วนต่าง <b>${sgn(diff)} °C</b> · ${sep ? '<b>ต่างกันชัดเจน</b>' : '<b>ยังแยกไม่ชัด</b> (ช่วงความเชื่อมั่นซ้อนกัน)'}`;
+  // ค่าที่เล็กมากใช้ทศนิยม 2 ตำแหน่ง ไม่ให้อ่านเป็น “0.1 กับ 0.1 ต่างกัน +0.1”
+  const dp = Math.max(Math.abs(b.mean), Math.abs(c.mean), Math.abs(diff)) < 0.5 ? 2 : 1;
+  return pre + `${what}${b.mean >= 0 ? 'ร้อนขึ้น' : 'เย็นลง'} <b>${num(Math.abs(b.mean), dp)} °C</b> ส่วนกลุ่มเทียบ${c.mean >= 0 ? 'ร้อนขึ้น' : 'เย็นลง'} ${num(Math.abs(c.mean), dp)} °C ` +
+    `ส่วนต่าง <b>${sgn(diff, dp)} °C</b> · ${sep ? '<b>ต่างกันชัดเจน</b>' : '<b>ยังแยกไม่ชัด</b> (ช่วงความเชื่อมั่นซ้อนกัน)'}`;
 }
 const CONTROL_NOTE = 'กลุ่มเทียบ = ไม่มีอาคาร ไม่เปลี่ยน และอยู่ห่างย่านที่สร้างใหม่ ≥ 2 กม.';
 
@@ -2396,6 +2421,9 @@ function writeHash() {
   const next = '#' + h.toString();
   if (location.hash !== next) history.replaceState(null, '', next);
 }
+// เปิดลิงก์ที่มีค่าที่เลือกต่างไปในแท็บเดิม (เช่น สแกน QR อีกอัน) - replaceState ข้างบนไม่ทำให้เกิด hashchange
+// จึงโหลดหน้าใหม่ตามลิงก์ได้เลยโดยไม่ชนกับการเขียน hash ของแอปเอง
+window.addEventListener('hashchange', () => { if (booted) location.reload(); });
 function readHash() {
   const h = new URLSearchParams(location.hash.replace(/^#/, ''));
   const y = parseInt(h.get('y'), 10);
