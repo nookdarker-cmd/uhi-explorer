@@ -1665,6 +1665,8 @@ def validate():
             d = d.rename('D').updateMask(static_band('DENS2020', sv).gte(POP_ANY))
             stats = rr(d.addBands(d.abs().rename('ABS')), MEAN_COUNT, region).getInfo() or {}
             return {'ready': True, 'season': season, 'years': list(CHECK_YEARS),
+                    # v2 ปรับเทียบจากวันที่วัดตรงกัน (paired) / v1 ชุดเดิมจากค่าเฉลี่ยช่วงที่ทำงานพร้อมกัน
+                    'method': 'paired' if v == 2 else 'overlap',
                     'bias_years': list(BIAS_YEARS), 'mean': stats.get('D_mean'),
                     'mae': stats.get('ABS_mean'), 'count': as_int(stats.get('D_count'))}
         return jsonify(cached(f'validate|{region_key(spec)}|{season}|{v}{sv}', calc))

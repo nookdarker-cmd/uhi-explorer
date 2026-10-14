@@ -1236,7 +1236,7 @@ async function appendValidation(el, ctx) {
     const v = await getData('validate', '/api/validate', { ...state.focus.payload, season: ctx.snap.season }, ctx);
     if (!ctx.live() || !el || !el.isConnected || !v.ready || !v.count || !isNum(v.mean)) return;
     const yrs = v.years || cfg.check_years, by = v.bias_years || cfg.bias_years;
-    el.insertAdjacentHTML('beforeend', `<p class="note">ตรวจสอบการปรับเทียบ VIIRS: ปรับเทียบจากวันที่สองดาวเทียมวัดตรงกันในปี ${by[0]}–${by[1]} แล้วทดสอบกับปี ${yrs[0]}–${yrs[1]} ซึ่งไม่ได้ใช้ตอนปรับ ค่า VIIRS ที่ปรับแล้วต่างจาก Aqua เฉลี่ย ${sgn(v.mean)} °C (คลาดเคลื่อนเฉลี่ยรายช่อง ${isNum(v.mae) ? num(v.mae) : '–'} °C) ในย่านที่มีคนอยู่ของพื้นที่นี้</p>`);
+    el.insertAdjacentHTML('beforeend', `<p class="note">ตรวจสอบการปรับเทียบ VIIRS: ปรับเทียบจาก${v.method === 'paired' ? 'วันที่สองดาวเทียมวัดตรงกัน' : 'ช่วงที่สองดาวเทียมทำงานพร้อมกัน'}ในปี ${by[0]}–${by[1]} แล้วทดสอบกับปี ${yrs[0]}–${yrs[1]} ซึ่งไม่ได้ใช้ตอนปรับ ค่า VIIRS ที่ปรับแล้วต่างจาก Aqua เฉลี่ย ${sgn(v.mean)} °C (คลาดเคลื่อนเฉลี่ยรายช่อง ${isNum(v.mae) ? num(v.mae) : '–'} °C) ในย่านที่มีคนอยู่ของพื้นที่นี้</p>`);
   } catch (err) { /* หมายเหตุเสริม ไม่จำเป็นต้องแจ้งเมื่อโหลดไม่ได้ */ }
 }
 
