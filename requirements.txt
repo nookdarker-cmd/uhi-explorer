@@ -1,3 +1,3 @@
-flask
-earthengine-api
-gunicorn
+flask==3.1.3
+earthengine-api==1.7.47
+gunicorn==26.2.0

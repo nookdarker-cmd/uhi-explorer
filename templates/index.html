@@ -2,7 +2,9 @@
 <html lang="th">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="แผนที่ความร้อนเมืองจากข้อมูลดาวเทียม เทียบกรุงเทพมหานครกับขอนแก่น และหาย่านที่ควรปลูกต้นไม้เพิ่ม">
+  <meta name="theme-color" content="#fbf8f3">
   <title>แผนที่ความร้อนเมือง · Urban Heat Explorer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -23,6 +25,8 @@
       --primary: #0e5a6a;
       --primary-soft: #e3f0f2;
       --heat: #d1352b;
+      --c1: #0e5a6a;
+      --c2: #d95f02;
       --shadow: 0 10px 30px rgba(29, 35, 39, .14), 0 2px 6px rgba(29, 35, 39, .08);
       --radius: 14px;
       --gap: 12px;
@@ -33,6 +37,7 @@
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; height: 100%; font-family: var(--font); color: var(--ink); background: var(--paper); }
+    body { overflow: hidden; }
     button, select, input { font: inherit; color: inherit; }
     button { cursor: pointer; }
     :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
@@ -40,6 +45,7 @@
     .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
     .muted { color: var(--muted); }
     .icon { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+    .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
     /* ---------- แผนที่ ---------- */
     #map { position: absolute; inset: 0; background: #e9e5df; }
@@ -48,6 +54,8 @@
     .leaflet-bar { border: 1px solid var(--line) !important; border-radius: 12px !important; box-shadow: var(--shadow) !important; overflow: hidden; }
     .leaflet-bar a { width: 38px !important; height: 38px !important; line-height: 38px !important; color: var(--ink) !important; background: var(--panel) !important; border-bottom-color: var(--line) !important; display: flex !important; align-items: center; justify-content: center; font-size: 20px; }
     .leaflet-bar a:hover { background: var(--soft) !important; }
+    .leaflet-bar a.lg-btn { width: auto !important; padding: 0 12px; font-size: 13px; font-weight: 600; gap: 6px; }
+    .lg-ctl { display: none; }
     .leaflet-bottom.leaflet-left { margin-bottom: calc(var(--bar-real, var(--bar-h)) + 2 * var(--gap)); margin-left: 4px; }
     .leaflet-control-attribution { font-size: 10px; background: rgba(255,253,249,.8) !important; border-radius: 6px 0 0 0; }
 
@@ -55,13 +63,25 @@
     #progress.on { width: 70%; opacity: 1; transition: width 8s cubic-bezier(.1,.6,.3,1); }
     #progress.done { width: 100%; opacity: 0; }
 
-    .chip { position: absolute; z-index: 1000; left: 50%; transform: translateX(-50%); top: 14px; padding: 8px 14px; border-radius: 999px; background: var(--ink); color: #fff; font-size: 13px; box-shadow: var(--shadow); display: flex; gap: 8px; align-items: center; }
+    .chip { position: absolute; z-index: 1000; left: 50%; transform: translateX(-50%); top: 14px; padding: 8px 14px; border: 0; border-radius: 999px; background: var(--ink); color: #fff; font-size: 13px; box-shadow: var(--shadow); display: flex; gap: 8px; align-items: center; }
+
+    /* ---------- หน้าเริ่มต้น ---------- */
+    #startup { position: fixed; inset: 0; z-index: 1500; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(251,248,243,.78); animation: fadeIn .3s ease .3s both; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    #startup .card { width: min(430px, 100%); padding: 26px 26px 24px; text-align: center; }
+    #startup .logo { display: inline-flex; align-items: center; gap: 10px; text-align: left; }
+    #startup .logo b { display: block; font: 700 17px/1.2 var(--display); }
+    #startup .logo small { color: var(--muted); font-size: 11.5px; }
+    #startup .spin { margin: 22px auto 4px; }
+    #startup h2 { margin: 12px 0 6px; font: 600 17px/1.4 var(--display); }
+    #startup p { margin: 0; font-size: 14px; line-height: 1.6; color: var(--muted); white-space: pre-line; }
+    #startup .btn-cmp { margin-top: 16px; }
 
     /* ---------- ชั้นข้อมูล (ขวาบน) ---------- */
     #layers { position: absolute; top: var(--gap); right: var(--gap); z-index: 1250; width: 300px; max-width: calc(100vw - 90px); }
     #layers:not(.collapsed) .layer-body { max-height: calc(100vh - 90px); overflow: auto; }
     #layers.collapsed { width: auto; }
-    #layerToggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 12px; border: 0; background: none; border-radius: var(--radius); font-weight: 600; }
+    #layerToggle { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 42px; padding: 10px 12px; border: 0; background: none; border-radius: var(--radius); font-weight: 600; }
     #layerToggle:hover { background: var(--soft); }
     #layers.collapsed #layerToggle .label { display: none; }
     #layerToggle .chev { margin-left: auto; transition: transform .2s; }
@@ -78,124 +98,260 @@
     .layer-foot input[type=range] { flex: 1; accent-color: var(--primary); }
 
     /* ---------- สัญลักษณ์ (ซ้ายล่าง) ---------- */
-    #legend { position: absolute; left: var(--gap); bottom: calc(var(--bar-real, var(--bar-h)) + 2 * var(--gap) + 24px); z-index: 1000; padding: 12px 14px; max-width: 270px; font-size: 12.5px; line-height: 1.5; }
+    #legend { position: absolute; left: var(--gap); bottom: calc(var(--bar-real, var(--bar-h)) + 2 * var(--gap) + 24px); z-index: 1000; padding: 12px 14px; max-width: 280px; font-size: 12.5px; line-height: 1.5; }
     #legend h4 { margin: 0 0 6px; font: 600 13.5px/1.3 var(--display); }
     #legend .row { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
-    #legend .sw { width: 14px; height: 14px; border-radius: 4px; flex: none; border: 1px solid rgba(0,0,0,.15); }
-    #legend .grad { height: 10px; border-radius: 6px; margin: 6px 0 2px; border: 1px solid rgba(0,0,0,.1); }
+    .sw { width: 14px; height: 14px; border-radius: 4px; flex: none; border: 1px solid rgba(29,35,39,.45); }
+    #legend .grad { height: 10px; border-radius: 6px; margin: 6px 0 2px; border: 1px solid rgba(29,35,39,.3); }
     #legend .ends { display: flex; justify-content: space-between; color: var(--muted); }
-    #legend small { display: block; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+    #legend small { display: block; color: var(--muted); margin-top: 6px; line-height: 1.45; }
+    .link { border: 0; background: none; padding: 0; color: var(--primary); font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 
     /* ---------- แถบล่าง ---------- */
-    #bar { position: absolute; left: var(--gap); right: var(--gap); bottom: var(--gap); z-index: 1100; min-height: var(--bar-h); padding: 8px 10px 8px 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    #bar { position: absolute; left: var(--gap); right: var(--gap); bottom: var(--gap); z-index: 1100; min-height: var(--bar-h); padding: 8px 10px 8px 14px; display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; }
     body.panel-open #bar { right: calc(var(--panel-w) + 2 * var(--gap)); }
-    .brand { display: flex; align-items: center; gap: 10px; padding-right: 6px; margin-right: 2px; border-right: 1px solid var(--line); }
-    .brand .dot { width: 26px; height: 26px; border-radius: 8px; background: conic-gradient(from 200deg, #2b83ba, #abdda4, #ffffbf, #fdae61, #d7191c, #2b83ba); box-shadow: inset 0 0 0 3px rgba(255,255,255,.55); }
-    .brand b { display: block; font: 700 15px/1.15 var(--display); }
+    .brand { display: flex; align-items: center; gap: 10px; padding-right: 8px; border-right: 1px solid var(--line); }
+    .dot { width: 26px; height: 26px; border-radius: 8px; flex: none; background: conic-gradient(from 200deg, #2b83ba, #abdda4, #ffffbf, #fdae61, #d7191c, #2b83ba); box-shadow: inset 0 0 0 3px rgba(255,255,255,.55); }
+    .brand b { display: block; font: 700 15px/1.15 var(--display); white-space: nowrap; }
     .brand small { color: var(--muted); font-size: 11px; letter-spacing: .02em; }
     .field { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
-    .field select, .field input { height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); font-size: 14px; }
-    .field input { width: 170px; }
-    .seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--soft); border-radius: 11px; }
-    .seg button { border: 0; background: none; padding: 6px 11px; border-radius: 8px; font-size: 13px; white-space: nowrap; color: var(--muted); }
+    .field select, .field input { height: 38px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); font-size: 14px; }
+    .field input { width: 150px; }
+    .seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--soft); border-radius: 11px; max-width: 100%; }
+    .seg button { border: 0; background: none; padding: 6px 10px; border-radius: 8px; font-size: 13px; white-space: nowrap; color: var(--muted); }
     .seg button:hover { color: var(--ink); }
     .seg button.on { background: #fff; color: var(--ink); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
     .quick { display: flex; gap: 4px; }
-    .pill { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 5px 11px; font-size: 13px; }
+    .pill { height: 32px; border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 0 11px; font-size: 13px; white-space: nowrap; }
     .pill:hover { border-color: var(--primary); color: var(--primary); }
-    .tools { display: flex; gap: 4px; }
-    .ibtn { width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); background: #fff; border-radius: 10px; color: var(--ink); }
+    .tools, .side { display: flex; gap: 4px; align-items: center; }
+    .side { gap: 8px; }
+    .ibtn { width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); background: #fff; border-radius: 10px; color: var(--ink); flex: none; }
     .ibtn:hover { background: var(--soft); }
     .ibtn.on { background: var(--ink); color: #fff; border-color: var(--ink); }
-    .spacer { flex: 1; }
-    #status { font-size: 12.5px; color: var(--muted); min-width: 0; flex: 1 1 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .btn-primary { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px; border: 0; border-radius: 10px; background: var(--primary); color: #fff; font-weight: 600; font-size: 14px; }
-    .btn-primary:hover { background: #0b4a57; }
-    .btn-primary.on { background: var(--ink); }
+    .side { margin-left: auto; }
+    .br { display: none; }
+    #status { font-size: 12px; line-height: 1.35; color: var(--muted); min-width: 0; flex: 1 1 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: -2px; }
+    #status:empty { display: none; }
+    #status[data-kind=err] { color: #a3291f; }
+    #status[data-kind=warn] { color: #7a5a00; }
+    .btn-cmp { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 38px; padding: 0 14px; border: 0; border-radius: 10px; background: var(--primary); color: #fff; font-weight: 600; font-size: 14px; white-space: nowrap; box-shadow: 0 2px 8px rgba(14,90,106,.28); }
+    .btn-cmp:hover { background: #0b4a57; }
+    .btn-cmp[aria-pressed=true] { background: var(--ink); box-shadow: none; }
+    .btn-cmp .pair { display: inline-flex; gap: 3px; align-items: flex-end; height: 16px; }
+    .btn-cmp .pair i { width: 5px; border-radius: 2px; background: #fff; }
+    .btn-cmp .pair i:first-child { height: 16px; }
+    .btn-cmp .pair i:last-child { height: 10px; background: #f6a96b; }
+    .btn-ghost { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; font-weight: 600; font-size: 14px; white-space: nowrap; }
+    .btn-ghost:hover { border-color: var(--primary); color: var(--primary); }
+    .btn-ghost.on { background: var(--primary-soft); border-color: #bcdadf; color: var(--primary); }
 
-    /* ---------- แผงข้อมูล (ขวาล่าง) ---------- */
+    /* ---------- แผงข้อมูล ---------- */
     #panel { position: absolute; right: var(--gap); bottom: var(--gap); z-index: 1101; width: var(--panel-w); height: min(78vh, 720px); display: none; flex-direction: column; overflow: hidden; }
     body.panel-open #panel { display: flex; }
-    .p-head { padding: 14px 16px 10px; display: flex; gap: 10px; align-items: flex-start; border-bottom: 1px solid var(--line); }
+    .handle { display: none; }
+    .p-head { padding: 14px 12px 10px 16px; display: flex; gap: 8px; align-items: flex-start; border-bottom: 1px solid var(--line); }
+    .p-titles { min-width: 0; flex: 1; }
     .p-head h2 { margin: 0; font: 700 18px/1.3 var(--display); }
     .p-head p { margin: 2px 0 0; font-size: 12.5px; color: var(--muted); }
-    .p-head .ibtn { margin-left: auto; border: 0; background: none; }
-    .tabs { display: flex; gap: 2px; padding: 8px 12px 0; border-bottom: 1px solid var(--line); }
-    .tabs button { border: 0; background: none; padding: 9px 12px; font-size: 14px; color: var(--muted); border-bottom: 2.5px solid transparent; margin-bottom: -1px; }
-    .tabs button.on { color: var(--ink); font-weight: 600; border-bottom-color: var(--heat); }
-    .p-body { flex: 1; overflow: auto; padding: 14px 16px 18px; }
-    .p-body section + section { margin-top: 16px; }
-    .p-body h3 { margin: 0 0 8px; font: 600 14.5px/1.3 var(--display); }
+    .p-head .ibtn { border: 0; background: none; }
+    .p-head .ibtn:hover { background: var(--soft); }
+    #btnBack { margin: -4px 0 0 -8px; }
+    .tabs { display: flex; gap: 2px; padding: 8px 12px 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
+    .tabs button { border: 0; background: none; padding: 9px 12px; font-size: 14px; color: var(--muted); border-bottom: 2.5px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+    .tabs button[aria-selected=true] { color: var(--ink); font-weight: 600; border-bottom-color: var(--heat); }
+    .p-body { flex: 1; overflow: auto; padding: 14px 16px 18px; overscroll-behavior: contain; }
+    .p-body section + section { margin-top: 18px; }
+    .p-body h3 { margin: 0 0 8px; font: 600 14.5px/1.35 var(--display); }
+    .p-body h4.sub-h { margin: 16px 0 0; font: 600 13px/1.3 var(--display); color: var(--muted); }
     .lead { font-size: 14px; line-height: 1.6; margin: 0 0 4px; }
     .note { font-size: 12px; color: var(--muted); line-height: 1.5; margin: 8px 0 0; }
-    .empty { padding: 26px 10px; text-align: center; color: var(--muted); font-size: 14px; line-height: 1.6; }
+    .empty { padding: 22px 10px; text-align: center; color: var(--muted); font-size: 14px; line-height: 1.6; }
+    .seg + div { margin-top: 12px; }
 
     .hero { display: flex; gap: 14px; align-items: center; padding: 14px; border-radius: 12px; background: var(--soft); }
     .hero .temp { font: 700 34px/1 var(--display); letter-spacing: -.01em; }
     .hero .temp small { font-size: 16px; font-weight: 600; }
-    .hero .lvl { display: inline-block; margin-top: 6px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid rgba(0,0,0,.12); }
+    .lvl { display: inline-block; margin-top: 6px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid rgba(29,35,39,.45); }
     .hero p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.45; }
 
-    .stack { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: #ece6dc; }
-    .stack span { display: block; height: 100%; }
+    .stack { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: #ece6dc; border: 1px solid rgba(29,35,39,.28); }
+    .stack span { display: block; height: 100%; box-shadow: inset -1px 0 0 rgba(255,255,255,.7); }
     .keys { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: 12.5px; }
     .keys span { display: inline-flex; align-items: center; gap: 6px; }
-    .keys i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+    .keys i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; border: 1px solid rgba(29,35,39,.45); }
 
     .prio-row { display: grid; grid-template-columns: 12px 1fr auto; gap: 4px 10px; align-items: start; padding: 10px 0; border-top: 1px solid var(--line); }
     .prio-row:first-of-type { border-top: 0; }
-    .prio-row i { width: 12px; height: 12px; border-radius: 4px; margin-top: 4px; }
+    .prio-row > i { width: 12px; height: 12px; border-radius: 4px; margin-top: 5px; border: 1px solid rgba(29,35,39,.4); }
     .prio-row b { font-weight: 600; font-size: 14px; }
     .prio-row .sub { grid-column: 2 / 4; font-size: 12.5px; color: var(--muted); line-height: 1.45; }
     .prio-row .num { font: 600 14px var(--display); text-align: right; white-space: nowrap; }
+    .tag { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 0 7px 0 5px; border-radius: 999px; background: #e3f1e6; color: #1f6237; font-size: 11.5px; font-weight: 600; vertical-align: 1px; }
+    .tag svg { width: 13px; height: 13px; }
 
-    .chart-wrap { position: relative; height: 260px; margin-top: 10px; }
+    .sens { width: 100%; border-collapse: separate; border-spacing: 4px; margin-top: 4px; }
+    .sens th { font-weight: 600; color: var(--muted); font-size: 11.5px; text-align: center; padding: 2px; line-height: 1.3; }
+    .sens th[scope=row] { text-align: right; white-space: nowrap; padding-right: 4px; }
+    .sens td { text-align: center; background: var(--soft); border-radius: 8px; padding: 6px 4px; font: 600 14px/1.25 var(--display); }
+    .sens td small { display: block; font: 400 11px/1.3 var(--font); color: var(--muted); }
+    .sens td.def { background: #fdecea; box-shadow: inset 0 0 0 2px var(--heat); }
+
+    .meter { position: relative; height: 12px; border-radius: 6px; background: #ece6dc; margin: 26px 0 4px; border: 1px solid rgba(29,35,39,.2); }
+    .meter .fill { height: 100%; border-radius: 6px 0 0 6px; background: #2f7d4a; }
+    .meter .target { position: absolute; top: -7px; bottom: -7px; border-left: 2px dashed var(--ink); }
+    .meter .target span { position: absolute; bottom: calc(100% + 1px); left: 0; transform: translateX(-50%); font-size: 11px; font-weight: 600; white-space: nowrap; }
+
+    .chart-wrap { position: relative; height: 240px; margin-top: 10px; }
+    .chart-wrap.sm { height: 150px; }
+    .chart-wrap.md { height: 200px; }
+    .chart-wrap.tall { height: 270px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .mini { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-size: 13px; color: var(--ink); }
+    .mini:hover { border-color: var(--primary); color: var(--primary); }
+    .mini svg { width: 15px; height: 15px; }
+    .tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 10px; }
+    .tbl th, .tbl td { padding: 5px 6px; border-bottom: 1px solid var(--line); text-align: right; }
+    .tbl th:first-child, .tbl td:first-child { text-align: left; }
+    .tbl thead th { color: var(--muted); font-weight: 600; }
+    .tbl tr.ref td { font-weight: 600; }
+    .tbl tr.dim td { color: var(--muted); }
+
     .loader { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 34px 10px; color: var(--muted); font-size: 13.5px; text-align: center; }
     .spin { width: 26px; height: 26px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--heat); animation: spin .8s linear infinite; }
+    .spin.sm { width: 16px; height: 16px; border-width: 2px; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .skel { height: 14px; border-radius: 7px; background: linear-gradient(90deg, #efe9df 25%, #f8f4ee 50%, #efe9df 75%); background-size: 200% 100%; animation: shimmer 1.2s infinite; margin: 8px 0; }
+    .skel { height: 12px; border-radius: 6px; background: linear-gradient(90deg, #efe9df 25%, #f8f4ee 50%, #efe9df 75%); background-size: 200% 100%; animation: shimmer 1.2s infinite; margin: 8px 0; }
     @keyframes shimmer { to { background-position: -200% 0; } }
+    .state { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 14px; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
+    .state > span { flex: 1 1 200px; }
+    .state.err { color: #8a2a20; background: #fbeeec; border-radius: 10px; }
+    .state.wait { color: #6b5310; background: #fdf6e3; border-radius: 10px; }
+    .fastnote { display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 1.4; color: #6b5310; background: #fdf6e3; border: 1px solid #f1e2b3; border-radius: 8px; padding: 5px 9px; margin: 0 0 10px; }
+    .fastnote svg { width: 14px; height: 14px; }
+
+    /* ---------- ผลการศึกษา: เทียบ 2 เมือง ---------- */
+    #cmpWait .state { margin-bottom: 14px; }
+    .cmp-intro { font-size: 13.5px; line-height: 1.6; margin: 0 0 14px; color: var(--muted); }
+    .cmp-sec + .cmp-sec { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+    .cmp-sec h3 { display: flex; align-items: center; gap: 8px; font-size: 15.5px; }
+    .cmp-sec h3 .no { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--ink); color: #fff; font: 600 12px/1 var(--font); flex: none; }
+    .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .duo.wide { grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); }
+    .city { --c: var(--c1); min-width: 0; padding: 11px 13px 12px; background: #fff; border: 1px solid var(--line); border-top: 4px solid var(--c); border-radius: 12px; }
+    .city h4 { margin: 0 0 4px; font: 600 14px/1.3 var(--display); color: var(--c); }
+    .city .big { font: 700 30px/1.15 var(--display); letter-spacing: -.01em; }
+    .city .big small { font-size: 15px; font-weight: 600; }
+    .city p { margin: 4px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+    .city p.ink { color: var(--ink); font-size: 13px; }
+    .city .warn { color: #7a5a00; }
+    .err-inline .warn { color: #8a2a20; }
+    .nw { white-space: nowrap; }
+    .city .mini { margin-top: 10px; }
+    .slopes { margin-top: 8px; font-size: 13px; line-height: 1.55; }
+    .slopes div { display: flex; gap: 8px; align-items: baseline; padding: 4px 0; }
+    .slopes i { width: 10px; height: 10px; border-radius: 50%; flex: none; transform: translateY(1px); }
+    .bullets { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.6; color: var(--muted); }
+    .headline { font-size: 14.5px; line-height: 1.6; margin: 0 0 10px; }
 
     /* ---------- คำอธิบาย ---------- */
     #help { position: fixed; inset: 0; z-index: 1400; display: none; align-items: center; justify-content: center; background: rgba(29,35,39,.38); padding: 20px; }
     #help.open { display: flex; }
-    #help .card { width: min(640px, 100%); max-height: calc(100vh - 40px); overflow: auto; padding: 22px 26px; position: relative; }
-    #help h2 { margin: 0 0 4px; font: 700 21px/1.3 var(--display); }
-    #help h3 { margin: 18px 0 6px; font: 600 15.5px/1.3 var(--display); }
+    #help .card { width: min(680px, 100%); max-height: calc(100vh - 40px); display: flex; flex-direction: column; overflow: hidden; padding: 0; position: relative; }
+    #help .help-scroll { overflow: auto; padding: 22px 26px; overscroll-behavior: contain; }
+    #help h2 { margin: 0 0 4px; font: 700 21px/1.3 var(--display); padding-right: 40px; }
+    #help h3 { margin: 20px 0 6px; font: 600 15.5px/1.3 var(--display); }
     #help p, #help li { font-size: 14px; line-height: 1.65; }
     #help ul { padding-left: 20px; margin: 6px 0; }
-    #help .ibtn { position: absolute; top: 12px; right: 12px; border: 0; }
+    #help .ibtn { position: absolute; top: 12px; right: 14px; border: 0; background: var(--panel); z-index: 1; }
     #help .crit { display: grid; grid-template-columns: 14px 1fr; gap: 8px; align-items: start; margin: 8px 0; font-size: 14px; line-height: 1.55; }
-    #help .crit i { width: 14px; height: 14px; border-radius: 4px; margin-top: 4px; }
+    #help .crit i { width: 14px; height: 14px; border-radius: 4px; margin-top: 4px; border: 1px solid rgba(29,35,39,.4); }
     #help small { color: var(--muted); font-size: 12.5px; line-height: 1.5; display: block; }
+
+    /* ---------- จอกว้าง: มุมมองเทียบ 2 เมืองใช้แผงกว้างขึ้น ---------- */
+    @media (min-width: 861px) {
+      body.view-compare { --panel-w: clamp(380px, 48vw, 680px); }
+      body.view-compare #panel { height: min(calc(100vh - 80px), 900px); }
+    }
 
     /* ---------- จอเล็ก ---------- */
     @media (max-width: 860px) {
-      :root { --panel-w: calc(100vw - 2 * var(--gap)); }
+      :root { --gap: 10px; --panel-w: calc(100vw - 2 * var(--gap)); }
       body.panel-open #bar { right: var(--gap); }
-      #panel { height: 62vh; z-index: 1200; }
-      .brand small, #status { display: none; }
-      .field input { width: 130px; }
-      #legend { display: none; }
+      #bar { gap: 6px; padding: 8px; }
+      .br { display: block; flex: 1 1 100%; height: 0; }
+      .brand { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); padding: 6px 12px 6px 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); box-shadow: var(--shadow); gap: 8px; }
+      .brand .dot { width: 22px; height: 22px; border-radius: 7px; }
+      .brand b { font-size: 14px; }
+      .brand small { display: none; }
+      .f-year > span { display: none; }
+      #seasonSeg { flex: 1 1 0; min-width: 0; display: flex; overflow-x: auto; scrollbar-width: none; }
+      #seasonSeg button { flex: 1 0 auto; min-height: 40px; padding: 6px 7px; }
+      .f-prov { flex: 1 1 0; min-width: 0; }
+      .f-prov input { width: 100%; min-width: 0; }
+      #btnCompare { padding: 0 12px; }
+      #btnCompare .pair { display: none; }
+      .side { gap: 4px; }
+      #btnPanel span { display: none; }
+      #btnPanel { width: 40px; padding: 0; justify-content: center; }
+      #status { font-size: 12px; line-height: 1.3; padding: 0 2px; margin-top: 0; }
+      #status:empty { display: none; }
+      .ibtn, .btn-ghost, .btn-cmp, .pill, .field select, .field input { height: 40px; min-width: 40px; }
+      .ibtn { width: 40px; }
+      .leaflet-bar a { width: 40px !important; height: 40px !important; line-height: 40px !important; }
+      .leaflet-bar a.lg-btn { width: auto !important; }
+      .lg-ctl { display: block; }
+      .leaflet-control-zoom { display: none; }   /* บนมือถือใช้นิ้วซูมแทน เหลือที่ให้ปุ่มสัญลักษณ์ */
+      .chip { top: 58px; }
+
+      #panel { left: var(--gap); right: var(--gap); width: auto; z-index: 1200;
+               bottom: calc(var(--bar-real, 176px) + var(--gap) + 6px);
+               height: min(55vh, calc(100vh - var(--bar-real, 176px) - 96px)); }
+      @supports (height: 1dvh) {
+        #panel { height: min(55dvh, calc(100dvh - var(--bar-real, 176px) - 96px)); }
+      }
+      body.sheet-min #panel { height: auto; }
+      body.sheet-min .tabs, body.sheet-min .p-body { display: none; }
+      .handle { display: block; position: absolute; top: 0; left: 64px; right: 64px; height: 40px; border: 0; background: none; z-index: 2; padding: 0; }
+      .handle::before { content: ''; display: block; width: 44px; height: 5px; border-radius: 3px; background: #cfc6b8; margin: 8px auto 0; }
+      .p-head { padding-top: 26px; }
+      .p-head h2 { font-size: 16.5px; }
+      .tabs button { padding: 10px 10px; min-height: 40px; }
+      .seg button { min-height: 40px; }
+      .p-body { padding: 12px 14px 16px; }
+      .mini { height: 40px; }
+
+      #legend { display: none; top: 118px; bottom: auto; max-width: min(280px, calc(100vw - 2 * var(--gap))); max-height: calc(100vh - 140px - var(--bar-real, 176px)); overflow: auto; z-index: 1210; }
+      body.legend-open #legend { display: block; }
+      #layers { max-width: calc(100vw - 2 * var(--gap) - 56px); }
+      #layers:not(.collapsed) .layer-body { max-height: calc(100vh - var(--bar-real, 176px) - 90px); }
+      #help { padding: 10px; }
+      #help .card { max-height: calc(100vh - 20px); }
+      #help .help-scroll { padding: 18px 18px; }
+      .city .big { font-size: 26px; }
+    }
+    @media (max-width: 360px) {
+      .quick .pill { padding: 0 8px; }
+      #btnCompare { font-size: 13px; padding: 0 9px; }
     }
   </style>
 </head>
 <body>
-  <div id="map" aria-label="แผนที่"></div>
-  <div id="progress"></div>
-  <div id="zoomHint" class="chip" hidden>
-    <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5M11 8v6M8 11h6"/></svg>
+  <div id="map" role="application" aria-label="แผนที่ความร้อน"></div>
+  <div id="progress" aria-hidden="true"></div>
+  <button id="zoomHint" class="chip" hidden>
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5M11 8v6M8 11h6"/></svg>
     <span>ซูมเข้าอีกนิดเพื่อดูชั้นข้อมูลนี้</span>
-  </div>
+  </button>
 
   <!-- ชั้นข้อมูล (ขวาบน) -->
   <div id="layers" class="card collapsed">
-    <button id="layerToggle" aria-expanded="false" title="ชั้นข้อมูล">
-      <svg class="icon" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></svg>
+    <button id="layerToggle" aria-expanded="false" aria-controls="layerBody" title="ชั้นข้อมูล" aria-label="ชั้นข้อมูล">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></svg>
       <span class="label">ชั้นข้อมูล</span>
-      <svg class="icon chev" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></svg>
+      <svg class="icon chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg>
     </button>
-    <div class="layer-body">
+    <div class="layer-body" id="layerBody">
       <div id="layerList" role="radiogroup" aria-label="เลือกชั้นข้อมูล"></div>
       <div class="layer-foot">
         <span>ความทึบ</span>
@@ -203,30 +359,27 @@
       </div>
       <div class="layer-foot">
         <span>แผนที่ฐาน</span>
-        <div class="seg" id="baseSeg">
-          <button data-base="gray" class="on">สีเทา</button>
-          <button data-base="osm">ถนน</button>
-          <button data-base="sat">ดาวเทียม</button>
+        <div class="seg" id="baseSeg" role="group" aria-label="แผนที่ฐาน">
+          <button data-base="gray" class="on" aria-pressed="true">สีเทา</button>
+          <button data-base="osm" aria-pressed="false">ถนน</button>
+          <button data-base="sat" aria-pressed="false">ดาวเทียม</button>
         </div>
       </div>
     </div>
   </div>
 
-  <div id="legend" class="card"></div>
+  <div id="legend" class="card" role="region" aria-label="สัญลักษณ์แผนที่"></div>
 
   <!-- แถบล่าง -->
   <div id="bar" class="card">
     <div class="brand">
-      <span class="dot"></span>
+      <span class="dot" aria-hidden="true"></span>
       <div><b>แผนที่ความร้อนเมือง</b><small>Urban Heat Explorer</small></div>
     </div>
-    <label class="field">ปี <select id="year" aria-label="ปี"></select></label>
-    <div class="seg" id="seasonSeg" role="group" aria-label="ฤดู">
-      <button data-season="all" class="on">ทั้งปี</button>
-      <button data-season="dry">หน้าแล้ง</button>
-      <button data-season="wet">หน้าฝน</button>
-    </div>
-    <label class="field">
+    <label class="field f-year"><span>ปี</span><select id="year" aria-label="ปี"></select></label>
+    <div class="seg" id="seasonSeg" role="group" aria-label="ฤดู"></div>
+    <span class="br" aria-hidden="true"></span>
+    <label class="field f-prov">
       <input id="province" list="provList" placeholder="ค้นหาจังหวัด…" aria-label="ค้นหาจังหวัด" autocomplete="off">
       <datalist id="provList"></datalist>
     </label>
@@ -234,106 +387,93 @@
       <button class="pill" data-quick="Bangkok">กรุงเทพฯ</button>
       <button class="pill" data-quick="Khon Kaen">ขอนแก่น</button>
     </div>
+    <span class="br" aria-hidden="true"></span>
+    <button class="btn-cmp" id="btnCompare" aria-pressed="false" title="ผลการศึกษา: เทียบกรุงเทพฯ กับขอนแก่น">
+      <span class="pair" aria-hidden="true"><i></i><i></i></span>เทียบ 2 เมือง
+    </button>
     <div class="tools">
       <button class="ibtn" id="btnPoly" title="วาดพื้นที่ (คลิกวางจุด ดับเบิลคลิกเพื่อจบ)" aria-label="วาดพื้นที่">
-        <svg class="icon" viewBox="0 0 24 24"><path d="M5 7 12 3l7 5-2 10H7Z"/><circle cx="5" cy="7" r="1.6"/><circle cx="12" cy="3" r="1.6"/><circle cx="19" cy="8" r="1.6"/><circle cx="17" cy="18" r="1.6"/><circle cx="7" cy="18" r="1.6"/></svg>
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7 12 3l7 5-2 10H7Z"/><circle cx="5" cy="7" r="1.6"/><circle cx="12" cy="3" r="1.6"/><circle cx="19" cy="8" r="1.6"/><circle cx="17" cy="18" r="1.6"/><circle cx="7" cy="18" r="1.6"/></svg>
       </button>
       <button class="ibtn" id="btnRect" title="วาดสี่เหลี่ยม (กดค้างแล้วลาก)" aria-label="วาดสี่เหลี่ยม">
-        <svg class="icon" viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="1.5" stroke-dasharray="3 2.5"/></svg>
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="6" width="16" height="12" rx="1.5" stroke-dasharray="3 2.5"/></svg>
       </button>
-      <button class="ibtn" id="btnClear" title="ล้างพื้นที่ที่เลือก" aria-label="ล้าง">
-        <svg class="icon" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>
+      <button class="ibtn" id="btnClear" title="ล้างพื้นที่ที่เลือก" aria-label="ล้างพื้นที่ที่เลือก">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>
       </button>
     </div>
-    <span id="status"></span>
-    <button class="ibtn" id="btnHelp" title="อ่านแผนที่ยังไง" aria-label="คำอธิบาย">
-      <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5V14M12 17.5v.01"/></svg>
-    </button>
-    <button class="btn-primary" id="btnPanel" aria-label="เปิดหรือปิดแผงข้อมูล">
-      <svg class="icon" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
-      <span>ข้อมูล</span>
-    </button>
+    <div class="side">
+      <button class="ibtn" id="btnHelp" title="อ่านแผนที่ยังไง" aria-label="คำอธิบาย" aria-haspopup="dialog">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5V14M12 17.5v.01"/></svg>
+      </button>
+      <button class="btn-ghost" id="btnPanel" aria-label="เปิดหรือปิดแผงข้อมูล" aria-expanded="false" aria-controls="panel">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+        <span>ข้อมูล</span>
+      </button>
+    </div>
+    <span id="status" role="status" aria-live="polite"></span>
   </div>
 
-  <!-- แผงข้อมูล (ขวาล่าง) -->
-  <aside id="panel" class="card" aria-label="ข้อมูลพื้นที่">
+  <!-- แผงข้อมูล -->
+  <aside id="panel" class="card" aria-label="แผงข้อมูล">
+    <button class="handle" id="sheetHandle" aria-label="ย่อหรือขยายแผงข้อมูล" aria-expanded="true"></button>
     <div class="p-head">
-      <div>
+      <button class="ibtn" id="btnBack" hidden aria-label="กลับไปข้อมูลพื้นที่ที่เลือก" title="กลับไปข้อมูลพื้นที่">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18 9 12l6-6"/></svg>
+      </button>
+      <div class="p-titles">
         <h2 id="pTitle">ยังไม่ได้เลือกพื้นที่</h2>
         <p id="pSub">คลิกแผนที่ วาดพื้นที่ หรือเลือกจังหวัด</p>
       </div>
       <button class="ibtn" id="btnPanelClose" aria-label="ปิดแผงข้อมูล">
-        <svg class="icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
       </button>
     </div>
-    <nav class="tabs" role="tablist">
-      <button data-tab="overview" class="on" role="tab">ภาพรวม</button>
-      <button data-tab="year" role="tab">ปีที่เลือก</button>
-      <button data-tab="history" role="tab">ย้อนหลัง 20 ปี</button>
+    <nav class="tabs" id="tabs" role="tablist" aria-label="มุมมองข้อมูล">
+      <button id="t-overview" data-tab="overview" role="tab" aria-selected="true" aria-controls="tab-overview">ภาพรวม</button>
+      <button id="t-year" data-tab="year" role="tab" aria-selected="false" aria-controls="tab-year" tabindex="-1">ปีที่เลือก</button>
+      <button id="t-history" data-tab="history" role="tab" aria-selected="false" aria-controls="tab-history" tabindex="-1">ย้อนหลัง 20 ปี</button>
     </nav>
-    <div class="p-body">
-      <div id="tab-overview"></div>
-      <div id="tab-year" hidden>
-        <div class="seg" id="yearSeg">
-          <button data-view="green" class="on">แยกตามพื้นที่สีเขียว</button>
-          <button data-view="built">แยกตามสิ่งปลูกสร้าง</button>
+    <div class="p-body" id="pBody">
+      <div id="view-area">
+        <div id="tab-overview" role="tabpanel" aria-labelledby="t-overview"></div>
+        <div id="tab-year" role="tabpanel" aria-labelledby="t-year" hidden>
+          <div class="seg" id="yearSeg" role="group" aria-label="แยกกลุ่มตาม">
+            <button data-view="green" class="on" aria-pressed="true">แยกตามพื้นที่สีเขียว</button>
+            <button data-view="built" aria-pressed="false">แยกตามสิ่งปลูกสร้าง</button>
+          </div>
+          <div id="yearOut"></div>
         </div>
-        <div id="yearOut"></div>
-        <div class="chart-wrap" id="yearChartWrap" hidden><canvas id="yearChart"></canvas></div>
-        <p class="note" id="yearNote" hidden></p>
-      </div>
-      <div id="tab-history" hidden>
-        <div class="seg" id="histSeg">
-          <button data-view="trend" class="on">แนวโน้มรวม</button>
-          <button data-view="change">แยกตามระดับที่สิ่งปลูกสร้างเพิ่ม</button>
+        <div id="tab-history" role="tabpanel" aria-labelledby="t-history" hidden>
+          <div class="seg" id="histSeg" role="group" aria-label="มุมมองย้อนหลัง">
+            <button data-view="trend" class="on" aria-pressed="true">แนวโน้มรวม</button>
+            <button data-view="change" aria-pressed="false">แยกตามระดับที่อาคารเพิ่ม</button>
+          </div>
+          <div id="histOut"></div>
         </div>
-        <div id="histOut"></div>
-        <div class="chart-wrap" id="histChartWrap" hidden><canvas id="histChart"></canvas></div>
-        <p class="note" id="histNote" hidden></p>
       </div>
+      <div id="view-compare" hidden></div>
     </div>
   </aside>
 
   <!-- คำอธิบาย -->
   <div id="help" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
     <div class="card">
-      <button class="ibtn" id="helpClose" aria-label="ปิด">
-        <svg class="icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      <button class="ibtn" id="helpClose" aria-label="ปิดคำอธิบาย">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
       </button>
-      <h2 id="helpTitle">แผนที่นี้บอกอะไร</h2>
-      <p>เมืองที่มีอาคาร ถนน และลานคอนกรีตมาก จะดูดและเก็บความร้อนจากแดดไว้ ขณะที่ต้นไม้ให้ร่มเงาและคายน้ำช่วยลดความร้อน ความร้อนที่สูงขึ้นเป็นอันตรายต่อผู้คน โดยเฉพาะเด็ก ผู้สูงอายุ และคนทำงานกลางแจ้ง แผนที่นี้ช่วยหา<b>ย่านที่ควรปรับปรุงก่อน</b> และดูว่ามี<b>ที่โล่ง</b>ที่อาจทำเป็นพื้นที่สีเขียวได้หรือไม่</p>
+      <div class="help-scroll" tabindex="0" aria-label="เนื้อหาคำอธิบาย"><div id="helpBody"></div><small id="coverage"></small></div>
+    </div>
+  </div>
 
-      <h3>ย่านที่ควรปรับปรุง (ช่องละประมาณ 1 × 1 กม.)</h3>
-      <div id="helpCrit"></div>
-
-      <h3>คำศัพท์</h3>
-      <ul>
-        <li><b>อุณหภูมิพื้นผิวช่วงบ่าย (12–14 น.)</b> คือความร้อนของ "ผิว" เช่น หลังคา ถนน ดิน ใบไม้ ที่ดาวเทียมวัดได้ มักสูงกว่าอุณหภูมิอากาศในพยากรณ์อากาศ ใช้เฉพาะวันที่ท้องฟ้าโปร่ง</li>
-        <li><b>ระดับสีอุณหภูมิ</b> แบ่งเพื่อให้เห็นภาพเท่านั้น ไม่ใช่เกณฑ์ทางการ และไม่ใช่ "ดัชนีความร้อน" ที่คิดจากอุณหภูมิอากาศกับความชื้น</li>
-        <li><b>สิ่งปลูกสร้างและถนน</b> รวมอาคาร ถนน และลานคอนกรีต</li>
-        <li><b>พื้นที่สีเขียว</b> คือต้นไม้ หญ้า พุ่มไม้ และสวน</li>
-        <li><b>ที่โล่ง</b> คือหญ้า พุ่มไม้ และดินเปล่าในย่านที่มีคนอยู่ ไม่นับนาและไร่</li>
-        <li><b>หน้าแล้ง</b> พ.ย.–เม.ย. · <b>หน้าฝน</b> พ.ค.–ต.ค. (หน้าฝนมีเมฆมาก ข้อมูลอาจน้อย)</li>
-      </ul>
-
-      <h3>ข้อควรรู้</h3>
-      <ul>
-        <li>อุณหภูมิใช้เฉพาะพิกเซลที่ดาวเทียมประเมินว่าคลาดเคลื่อนไม่เกิน 2 °C ทั้งที่ติดป้าย "คุณภาพดี" และ "คุณภาพอื่น" เพราะถ้าใช้เฉพาะคุณภาพดี ย่านเมืองหนาแน่นจะหายไปมาก</li>
-        <li>"ที่โล่ง" เป็นแค่<b>จุดที่น่าตรวจสอบ</b> ดาวเทียมบอกไม่ได้ว่าเป็นที่ของใคร หรือมีแผนก่อสร้างหรือยัง ต้องตรวจกับผังเมืองหรือที่ดินของรัฐก่อนเสนอ</li>
-        <li>ตัวเลขที่เทียบกันเป็น<b>ความสัมพันธ์</b>จากข้อมูล ไม่ได้พิสูจน์สาเหตุ และไม่ใช่คำทำนายว่าปลูกต้นไม้แล้วจะเย็นลงเท่านั้นพอดี</li>
-        <li>สัดส่วนพื้นผิวคำนวณจากค่าความน่าจะเป็นของแบบจำลอง เป็นค่าประมาณ ลานโล่งในเมืองบางส่วนถูกนับเป็นสิ่งปลูกสร้าง ส่วน "ที่โล่ง" ใช้แผนที่ปี 2021 บางแห่งอาจถูกสร้างไปแล้ว</li>
-        <li>ประชากรเป็นค่าประมาณที่กระจายจากสำมะโนตามพื้นที่อาคาร เหมาะดูภาพรวมระดับย่าน และเป็นการสัมผัสความร้อน ไม่ใช่จำนวนผู้ป่วย</li>
-      </ul>
-
-      <h3>แหล่งข้อมูล</h3>
-      <ul>
-        <li>อุณหภูมิพื้นผิว: NASA MODIS Aqua (MYD11A1) ปี 2003–2022 และ VIIRS (VNP21A1D) ปี 2023 เป็นต้นไป โดยปรับค่า VIIRS ให้อยู่ระดับเดียวกับ Aqua ทีละพิกเซล จากส่วนต่างเฉลี่ยของสองดาวเทียมในช่วงที่วัดซ้อนกัน (2013–2020) เพื่อให้เทียบข้ามปีได้</li>
-        <li>พื้นผิว: Dynamic World V1 ปี 2016 เป็นต้นไป (This dataset is produced for the Dynamic World Project by Google in partnership with National Geographic Society and the World Resources Institute.)</li>
-        <li>ที่โล่ง (พุ่มไม้ ทุ่งหญ้า ดินเปล่า): ESA WorldCover 2021 ละเอียด 10 ม.</li>
-        <li>สิ่งปลูกสร้างย้อนหลังและประชากร: GHSL, European Commission JRC</li>
-        <li>ขอบเขตจังหวัด: FAO GAUL 2015 (ใช้เพื่อการศึกษา ไม่ใช่เชิงพาณิชย์) ในชุดนี้บึงกาฬยังรวมอยู่กับหนองคาย</li>
-      </ul>
-      <small id="coverage"></small>
+  <!-- หน้าเริ่มต้น (ระหว่างรอเซิร์ฟเวอร์) -->
+  <div id="startup" role="alertdialog" aria-modal="true" aria-labelledby="suTitle" aria-describedby="suText">
+    <div class="card">
+      <div class="logo"><span class="dot" aria-hidden="true"></span><div><b>แผนที่ความร้อนเมือง</b><small>Urban Heat Explorer</small></div></div>
+      <div class="spin" id="suSpin"></div>
+      <h2 id="suTitle">กำลังเริ่มระบบ…</h2>
+      <p id="suText"></p>
+      <button class="btn-cmp" id="suBtn" hidden></button>
     </div>
   </div>
 
@@ -342,18 +482,53 @@
 // workaround บั๊กของ Leaflet.draw 1.0.4 (ReferenceError: type is not defined)
 window.type = '';
 
-let cfg = {
-  first_year: 2003, last_year: 2025, default_year: 2022, aqua_last_year: 2022, dw_first_year: 2016,
+// ค่าตั้งต้นในหน้าเว็บ ใช้ระหว่างรอ /api/config (จะถูกแทนด้วยค่าจากเซิร์ฟเวอร์)
+const DEFAULT_CFG = {
+  version: 5, first_year: 2003, last_year: 2025, default_year: 2022, aqua_last_year: 2022, dw_first_year: 2016,
+  bias_years: [2013, 2020], check_years: [2021, 2022],
   lst_breaks: [30, 34, 38, 42],
   lst_palette: ['#2b83ba', '#abdda4', '#ffffbf', '#fdae61', '#d7191c'],
   hot: 34, very_hot: 38, hot_level: 3, pop_any: 300, pop_dense: 1500,
-  green_low: 0.15, open_min: 0.05,
-  prio_colors: ['#f2c14e', '#f08a24', '#d1352b'],
-  seasons: { all: 'ทั้งปี', dry: 'หน้าแล้ง (พ.ย.–เม.ย.)', wet: 'หน้าฝน (พ.ค.–ต.ค.)' },
-  point_radius_m: 2000
+  green_low: 0.15, plant_min: 0.05, n_min: 5,
+  prio_colors: ['#f2c14e', '#d1352b', '#d1352b'],
+  seasons: { all: 'ทั้งปี', hot: 'หน้าร้อน (มี.ค.–พ.ค.)', wet: 'หน้าฝน (มิ.ย.–ต.ค.)', cool: 'หน้าหนาว (พ.ย.–ก.พ.)' },
+  season_order: ['all', 'hot', 'wet', 'cool'],
+  point_radius_m: 2000, max_area_km2: 30000,
+  sens_temps: [36, 38, 40], sens_greens: [0.10, 0.15, 0.20],
+  compare_cities: [{ en: 'Bangkok', th: 'กรุงเทพมหานคร' }, { en: 'Khon Kaen', th: 'ขอนแก่น' }],
+  suhi: { urban_code: 30, rural_codes: [11, 12, 13], ring_km: [2, 20], elev_tol_m: 50 }
+};
+let cfg = JSON.parse(JSON.stringify(DEFAULT_CFG));
+
+// ชื่อจังหวัด (ชื่ออังกฤษตาม FAO GAUL → ชื่อไทย) ใช้แสดงได้ทันทีโดยไม่ต้องรอเซิร์ฟเวอร์
+const PROVINCE_TH = {
+  'Amnat Charoen': 'อำนาจเจริญ', 'Ang Thong': 'อ่างทอง', 'Bangkok': 'กรุงเทพมหานคร',
+  'Buriram': 'บุรีรัมย์', 'Chachoengsao': 'ฉะเชิงเทรา', 'Chainat': 'ชัยนาท',
+  'Chaiyaphum': 'ชัยภูมิ', 'Chanthaburi': 'จันทบุรี', 'Chiang Mai': 'เชียงใหม่',
+  'Chiang Rai': 'เชียงราย', 'Chonburi': 'ชลบุรี', 'Chumphon': 'ชุมพร',
+  'Kalasin': 'กาฬสินธุ์', 'Kampaeng Phet': 'กำแพงเพชร', 'Kanchanaburi': 'กาญจนบุรี',
+  'Khon Kaen': 'ขอนแก่น', 'Krabi': 'กระบี่', 'Lampang': 'ลำปาง', 'Lamphun': 'ลำพูน',
+  'Loei': 'เลย', 'Lopburi': 'ลพบุรี', 'Mae Hong Son': 'แม่ฮ่องสอน',
+  'Maha Sarakham': 'มหาสารคาม', 'Mukdahan': 'มุกดาหาร', 'Nakhon Nayok': 'นครนายก',
+  'Nakhon Pathom': 'นครปฐม', 'Nakhon Phanom': 'นครพนม', 'Nakhon Ratchasima': 'นครราชสีมา',
+  'Nakhon Sawan': 'นครสวรรค์', 'Nakhon Si Thammarat': 'นครศรีธรรมราช', 'Nan': 'น่าน',
+  'Narathiwat': 'นราธิวาส', 'Nong Bua Lamphu': 'หนองบัวลำภู', 'Nong Khai': 'หนองคาย',
+  'Nonthaburi': 'นนทบุรี', 'Pathum Thani': 'ปทุมธานี', 'Pattani': 'ปัตตานี',
+  'Phachinburi': 'ปราจีนบุรี', 'Phangnga': 'พังงา', 'Phatthalung': 'พัทลุง',
+  'Phayao': 'พะเยา', 'Phetchabun': 'เพชรบูรณ์', 'Phetchaburi': 'เพชรบุรี',
+  'Phichit': 'พิจิตร', 'Phitsanulok': 'พิษณุโลก', 'Phra Nakhon Si Ayudhya': 'พระนครศรีอยุธยา',
+  'Phrae': 'แพร่', 'Phuket': 'ภูเก็ต', 'Prachuap Khilikhan': 'ประจวบคีรีขันธ์',
+  'Ranong': 'ระนอง', 'Ratchaburi': 'ราชบุรี', 'Rayong': 'ระยอง', 'Roi Et': 'ร้อยเอ็ด',
+  'Sa Kaeo': 'สระแก้ว', 'Sakon Nakhon': 'สกลนคร', 'Samut Prakarn': 'สมุทรปราการ',
+  'Samut Sakhon': 'สมุทรสาคร', 'Samut Songkham': 'สมุทรสงคราม', 'Saraburi': 'สระบุรี',
+  'Satun': 'สตูล', 'Si Saket': 'ศรีสะเกษ', 'Singburi': 'สิงห์บุรี', 'Songkhla': 'สงขลา',
+  'Sukhothai': 'สุโขทัย', 'Suphanburi': 'สุพรรณบุรี', 'Surat Thani': 'สุราษฎร์ธานี',
+  'Surin': 'สุรินทร์', 'Tak': 'ตาก', 'Trad': 'ตราด', 'Trang': 'ตรัง',
+  'Ubon Ratchathani': 'อุบลราชธานี', 'Udon Thani': 'อุดรธานี', 'Uthai Thani': 'อุทัยธานี',
+  'Uttaradit': 'อุตรดิตถ์', 'Yala': 'ยะลา', 'Yasothon': 'ยโสธร'
 };
 
-const LEVEL_NAMES = ['เย็น', 'อุ่น', 'ร้อน', 'ร้อนมาก', 'ร้อนจัด'];
+const LEVEL_NAMES = ['ผิวเย็น', 'ผิวอุ่น', 'ผิวร้อน', 'ผิวร้อนมาก', 'ผิวร้อนจัด'];
 const COVER = [
   ['BUILT', 'สิ่งปลูกสร้างและถนน', '#7a6fb0'],
   ['TREES', 'ต้นไม้', '#2f7d4a'],
@@ -362,37 +537,210 @@ const COVER = [
   ['CROPS', 'นาและไร่', '#e8c766'],
   ['WATER', 'แหล่งน้ำ', '#5b9bd1']
 ];
+// สีของชั้นแผนที่ 10 ม. (ต้องตรงกับสีที่เซิร์ฟเวอร์ใช้วาด)
+const LAYER_COLORS = { tree: '#1b7837', grass: '#a6dba0', plant: '#c8873a', built: '#6a51a3' };
 const CHANGE_COLORS = ['#b8bec2', '#f1b6da', '#de77ae', '#c51b7d', '#7a6fb0'];
-const CHANGE_SHORT = [['ไม่มีอาคาร', '(กลุ่มเทียบ)'], ['อาคารเพิ่มน้อย', '(1–4 จุด)'], ['เพิ่มปานกลาง', '(4–8 จุด)'],
-                      ['เพิ่มมาก', '(เกิน 8 จุด)'], ['เมืองเดิม', '(หนาแน่นอยู่แล้ว)']];
+const CHANGE_SHORT = ['กลุ่มเทียบ', 'อาคารเพิ่มเล็กน้อย', 'อาคารเพิ่มปานกลาง', 'อาคารเพิ่มมาก', 'เมืองหนาแน่นเดิม'];
+const CITY_COLORS = ['#0e5a6a', '#d95f02'];
+const N_SHOW = 5;     // กลุ่มที่มีช่องน้อยกว่านี้ไม่แสดงในกราฟ
+const N_SENT = 20;    // ประโยคสรุปใช้เฉพาะกลุ่มที่มีช่องตั้งแต่นี้
+const CI_NOTE = 'ช่วงความเชื่อมั่นคิดแบบง่าย ข้อมูลช่องที่อยู่ใกล้กันมีความสัมพันธ์กัน ช่วงจริงจึงอาจกว้างกว่านี้';
+const FAST_NOTE = 'ข้อมูลส่วนนี้กำลังเตรียมล่วงหน้า อาจช้ากว่าปกติ';
+const TREE_SVG = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22v-6"/><path d="M12 16c-4 0-7-2.5-7-6a5 5 0 0 1 3-4.6A4 4 0 0 1 16 5a5 5 0 0 1 3 5c0 3.5-3 6-7 6Z"/></svg>';
+const PNG_SVG = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m21 16-5-5-8 8"/></svg>';
+const CSV_SVG = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>';
+const CLOCK_SVG = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
 
 const LAYERS = {
-  priority: { name: 'ย่านที่ควรปรับปรุง', desc: 'ร้อนมาก + คนหนาแน่น + เขียวน้อย', minZoom: 8, season: true },
-  lst: { name: 'อุณหภูมิพื้นผิวช่วงบ่าย', desc: '12–14 น. · ช่องละ 1 กม.', minZoom: 5, season: true },
-  green: { name: 'พื้นที่สีเขียว', desc: 'ต้นไม้ หญ้า สวน · ละเอียด 10 ม.', minZoom: 9 },
-  open: { name: 'ที่โล่งในย่านที่มีคนอยู่', desc: 'พุ่มไม้ ทุ่งหญ้า ดินเปล่า ที่อาจทำเป็นพื้นที่สีเขียว · 10 ม.', minZoom: 10 },
-  built: { name: 'สิ่งปลูกสร้างและถนน', desc: 'อาคาร ถนน ลานคอนกรีต · ละเอียด 10 ม.', minZoom: 9 },
-  built_change: { name: 'สิ่งปลูกสร้างที่เพิ่มขึ้น', desc: 'ปี 2005 → 2020', minZoom: 6 }
+  priority: { name: 'ย่านที่ควรปรับปรุง', desc: 'ผิวร้อน + คนหนาแน่น + สีเขียวน้อย · ช่องละ 1 กม.', minZoom: 8, nativeMax: 12, year: true, season: true },
+  lst: { name: 'อุณหภูมิพื้นผิวช่วงบ่าย', desc: 'ราว 12–14 น. · ช่องละ 1 กม.', minZoom: 5, nativeMax: 12, year: true, season: true },
+  green: { name: 'พื้นที่สีเขียว (ต้นไม้/หญ้า)', desc: 'Dynamic World · ละเอียด 10 ม.', minZoom: 9, year: true },
+  plant: { name: 'พื้นที่ปลูกต้นไม้เพิ่มได้', desc: 'หญ้า พุ่มไม้ ดินเปล่า ในย่านที่มีคนอยู่ · 10 ม.', minZoom: 10, year: true },
+  built: { name: 'สิ่งปลูกสร้างและถนน', desc: 'อาคาร ถนน ลานคอนกรีต · ละเอียด 10 ม.', minZoom: 9, year: true },
+  built_change: { name: 'สิ่งปลูกสร้างที่เพิ่มขึ้น 2005→2020', desc: 'GHSL · ช่องละ 100 ม.', minZoom: 6, nativeMax: 14 }
 };
+const TABS = ['overview', 'year', 'history'];
 
 const state = {
   year: 2022, season: 'all', layer: 'priority', opacity: 0.8,
-  tab: 'overview', yearView: 'green', histView: 'trend', focus: null
+  tab: 'overview', yearView: 'green', histView: 'trend',
+  focus: null,          // { payload, title, province }
+  view: 'area',         // 'area' = ข้อมูลพื้นที่ที่เลือก, 'compare' = ผลการศึกษาเทียบ 2 เมือง
+  panel: false
 };
+let booted = false;
 
+// =============================================================== ตัวช่วย
 const $ = id => document.getElementById(id);
+const isNum = v => typeof v === 'number' && isFinite(v);
+const ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ESC_MAP[c]);
+const MINUS = '−';
+const num = (x, d = 1) => { const s = Math.abs(x).toFixed(d); return (x < 0 && +s !== 0 ? MINUS : '') + s; };
+const sgn = (x, d = 1) => { const s = Math.abs(x).toFixed(d); return (+s === 0 ? '' : x > 0 ? '+' : MINUS) + s; };
 const nf = n => Math.round(n).toLocaleString('th-TH');
 // จำนวนคนปัดให้อ่านง่าย (ข้อมูลประชากรเป็นค่าประมาณ ไม่ควรแสดงละเอียดถึงหลักหน่วย)
-const nfP = n => (n >= 1e6 ? `${(n / 1e6).toFixed(1)} ล้านคน`
-  : `${(n >= 1000 ? Math.round(n / 100) * 100 : Math.round(n)).toLocaleString('th-TH')} คน`);
-const srcLabel = s => s === 'VIIRS' ? 'VIIRS (ปรับเทียบกับ Aqua)' : s;
-const f1 = x => x.toFixed(1);
-const levelOf = v => cfg.lst_breaks.reduce((l, b) => l + (v > b ? 1 : 0), 0);
-const seasonShort = () => ({ all: 'ทั้งปี', dry: 'หน้าแล้ง', wet: 'หน้าฝน' })[state.season];
+const nfP = n => {
+  if (!isNum(n)) return '–';
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + ' ล้านคน';
+  return (n >= 1000 ? Math.round(n / 100) * 100 : Math.round(n)).toLocaleString('th-TH') + ' คน';
+};
+const km2 = x => (!isNum(x) ? '–' : x < 10 ? x.toFixed(1) : nf(x));
+const pctOf = (a, b) => (b > 0 ? Math.round(a / b * 100) : 0);
+const r3 = v => (isNum(v) ? +v.toFixed(3) : '');
+const srcLabel = s => (s === 'VIIRS' ? 'VIIRS (ปรับเทียบกับ Aqua)' : s === 'Aqua' ? 'MODIS Aqua' : (s || ''));
+const levelOf = v => cfg.lst_breaks.filter(b => v >= b).length;
+const seasonFull = (s = state.season) => (cfg.seasons && cfg.seasons[s]) || s;
+const seasonShort = (s = state.season) => String(seasonFull(s)).split(' (')[0];
+const sleep = ms => new Promise(res => setTimeout(res, ms));
+function textOn(hex) {
+  const n = parseInt(String(hex).slice(1), 16);
+  return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) > 150 ? '#1d2327' : '#fff';
+}
+// ครึ่งความกว้างของช่วงความเชื่อมั่น 95% ของค่าเฉลี่ย = 1.96 · sd / √n
+const ciHalf = r => (r && isNum(r.sd) && r.count > 1 ? 1.96 * r.sd / Math.sqrt(r.count) : null);
+const ciOf = r => { const h = ciHalf(r); return h == null ? null : { lo: r.mean - h, hi: r.mean + h }; };
+const overlaps = (a, b) => !a || !b || !(a.lo > b.hi || b.lo > a.hi);
+// ถดถอยเชิงเส้นอย่างง่าย (OLS) คืนความชัน ค่าคลาดเคลื่อนมาตรฐาน และจุดตัดแกน
+function ols(pts) {
+  const n = pts.length;
+  if (n < 5) return null;
+  const mx = pts.reduce((a, p) => a + p[0], 0) / n, my = pts.reduce((a, p) => a + p[1], 0) / n;
+  let sxx = 0, sxy = 0;
+  pts.forEach(([x, y]) => { sxx += (x - mx) ** 2; sxy += (x - mx) * (y - my); });
+  if (!sxx) return null;
+  const b = sxy / sxx, a = my - b * mx;
+  const ss = pts.reduce((s, [x, y]) => s + (y - a - b * x) ** 2, 0);
+  const se = Math.sqrt(ss / (n - 2) / sxx);
+  return { a, b, se, n, x0: pts[0][0], x1: pts[n - 1][0] };
+}
+const trendText = f => {
+  const lo = (f.b - 1.96 * f.se) * 10, hi = (f.b + 1.96 * f.se) * 10;
+  const verdict = lo > 0 ? 'ร้อนขึ้นชัดเจน' : hi < 0 ? 'เย็นลงชัดเจน' : 'ยังสรุปไม่ได้ว่าเปลี่ยน';
+  return { slope: sgn(f.b * 10, 2), lo: sgn(lo, 2), hi: sgn(hi, 2), verdict };
+};
 
+// ---------- จังหวัด ----------
+let provinces = Object.entries(PROVINCE_TH).map(([en, th]) => ({ en, th })).sort((a, b) => a.th.localeCompare(b.th, 'th'));
+const provTh = en => { const p = provinces.find(x => x.en === en); return (p && p.th) || PROVINCE_TH[en] || en; };
+const provTitle = en => (en === 'Bangkok' ? '' : 'จังหวัด') + provTh(en);
+const cityShort = en => (en === 'Bangkok' ? 'กรุงเทพฯ' : provTh(en));
+const cmpCities = () => (Array.isArray(cfg.compare_cities) && cfg.compare_cities.length >= 2 ? cfg.compare_cities : DEFAULT_CFG.compare_cities).slice(0, 2);
+const cmpTitle = () => 'ผลการศึกษา: ' + cmpCities().map(c => cityShort(c.en)).join(' vs ');
+
+// ---------- Chart.js ----------
 Chart.defaults.font.family = "'IBM Plex Sans Thai', system-ui, sans-serif";
 Chart.defaults.color = '#4b5459';
 Chart.defaults.borderColor = '#ece6dc';
+Chart.defaults.animation.duration = 450;
+
+// ปลั๊กอินวาดเส้นช่วงความเชื่อมั่น (whiskers) จาก dataset.whiskers = [{lo, hi}, ...]
+Chart.register({
+  id: 'whiskers',
+  afterDatasetsDraw(chart) {
+    const ctx = chart.ctx, horiz = chart.options.indexAxis === 'y';
+    chart.data.datasets.forEach((ds, di) => {
+      if (!Array.isArray(ds.whiskers) || !chart.isDatasetVisible(di)) return;
+      const meta = chart.getDatasetMeta(di);
+      const vs = chart.scales[horiz ? meta.xAxisID : meta.yAxisID];
+      if (!vs) return;
+      ctx.save();
+      ctx.strokeStyle = ds.whiskerColor || 'rgba(29,35,39,.85)';
+      ctx.lineWidth = 1.5;
+      meta.data.forEach((el, i) => {
+        const w = ds.whiskers[i];
+        if (!w || !isNum(w.lo) || !isNum(w.hi) || ds.data[i] == null) return;
+        const a = vs.getPixelForValue(w.lo), b = vs.getPixelForValue(w.hi);
+        const c = horiz ? el.y : el.x, cap = 5;
+        ctx.beginPath();
+        if (horiz) {
+          ctx.moveTo(a, c); ctx.lineTo(b, c);
+          ctx.moveTo(a, c - cap); ctx.lineTo(a, c + cap);
+          ctx.moveTo(b, c - cap); ctx.lineTo(b, c + cap);
+        } else {
+          ctx.moveTo(c, a); ctx.lineTo(c, b);
+          ctx.moveTo(c - cap, a); ctx.lineTo(c + cap, a);
+          ctx.moveTo(c - cap, b); ctx.lineTo(c + cap, b);
+        }
+        ctx.stroke();
+      });
+      ctx.restore();
+    });
+  }
+});
+
+// ปลั๊กอินวาดเส้นแบ่งปีที่เปลี่ยนดาวเทียม (Aqua → VIIRS)
+Chart.register({
+  id: 'sensorSwitch',
+  defaults: { index: null, label: 'เปลี่ยนดาวเทียม' },
+  afterDatasetsDraw(chart, args, o) {
+    if (!o || o.index == null || o.index < 1) return;
+    const x = chart.scales.x, area = chart.chartArea, ctx = chart.ctx;
+    if (!x || o.index > x.max) return;
+    const px = (x.getPixelForValue(o.index - 1) + x.getPixelForValue(o.index)) / 2;
+    ctx.save();
+    ctx.strokeStyle = '#6b7378';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(px, area.top); ctx.lineTo(px, area.bottom); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font = '11px ' + Chart.defaults.font.family;
+    const w = ctx.measureText(o.label).width;
+    ctx.fillStyle = 'rgba(255,253,249,.92)';
+    ctx.fillRect(px - w - 8, area.top + 1, w + 6, 16);
+    ctx.fillStyle = '#4b5459';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.fillText(o.label, px - 5, area.top + 3);
+    ctx.restore();
+  }
+});
+
+// ปลั๊กอินวาดกลุ่มอ้างอิง (ค่าเป็น 0 จึงไม่มีแท่ง): ขีดหนาที่ศูนย์ + ป้าย "กลุ่มอ้างอิง = 0"
+Chart.register({
+  id: 'refMark',
+  defaults: { index: null, label: 'กลุ่มอ้างอิง = 0' },
+  afterDatasetsDraw(chart, args, o) {
+    if (!o || o.index == null) return;
+    const meta = chart.getDatasetMeta(0), el = meta && meta.data[o.index];
+    const ys = chart.scales.y, area = chart.chartArea, ctx = chart.ctx;
+    if (!el || !ys) return;
+    const x = el.x, half = Math.max(8, (el.width || 24) / 2), y0 = ys.getPixelForValue(0);
+    const w = (chart.data.datasets[0].whiskers || [])[o.index];
+    ctx.save();
+    ctx.strokeStyle = '#4b5459';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(x - half, y0); ctx.lineTo(x + half, y0); ctx.stroke();
+    ctx.font = '600 11px ' + Chart.defaults.font.family;
+    const slot = half * 2 + 16;
+    const lines = ctx.measureText(o.label).width > slot ? o.label.split(' = ').map((t, i) => (i ? '= ' + t : t)) : [o.label];
+    const lh = 13, top = Math.min(y0, w && isNum(w.hi) ? ys.getPixelForValue(w.hi) : y0) - 6;
+    let y = top - (lines.length - 1) * lh;
+    if (y - 10 < area.top) y = Math.max(y0, w && isNum(w.lo) ? ys.getPixelForValue(w.lo) : y0) + 16;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    lines.forEach((t, i) => {
+      const tw = ctx.measureText(t).width;
+      ctx.fillStyle = 'rgba(255,253,249,.9)';
+      ctx.fillRect(x - tw / 2 - 3, y + i * lh - 11, tw + 6, 14);
+      ctx.fillStyle = '#1d2327';
+      ctx.fillText(t, x, y + i * lh);
+    });
+    ctx.restore();
+  }
+});
+
+const charts = {};
+const chartMeta = {};
+function killChart(key) { if (charts[key]) { charts[key].destroy(); charts[key] = null; } }
+function drawChart(key, canvasId, config, meta) {
+  killChart(key);
+  const el = $(canvasId);
+  if (!el) return null;
+  charts[key] = new Chart(el, config);
+  chartMeta[key] = meta || {};
+  return charts[key];
+}
 
 // =============================================================== แผนที่
 const map = L.map('map', { zoomControl: true, attributionControl: true }).setView([13.7563, 100.5018], 10);
@@ -405,8 +753,8 @@ map.getPane('labels').style.pointerEvents = 'none';
 const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
 const bases = {
   gray: L.layerGroup([
-    L.tileLayer(ESRI + 'Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', { attribution: 'Basemap © Esri', maxZoom: 16 }),
-    L.tileLayer(ESRI + 'Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}', { pane: 'labels', maxZoom: 16 })
+    L.tileLayer(ESRI + 'Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', { attribution: 'Basemap © Esri', maxNativeZoom: 16, maxZoom: 19 }),
+    L.tileLayer(ESRI + 'Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}', { pane: 'labels', maxNativeZoom: 16, maxZoom: 19 })
   ]),
   osm: L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 19 }),
   sat: L.tileLayer(ESRI + 'World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Imagery © Esri', maxZoom: 19 })
@@ -417,7 +765,10 @@ function setBase(key) {
   Object.values(bases).forEach(l => map.removeLayer(l));
   bases[key].addTo(map);
   baseKey = key;
-  document.querySelectorAll('#baseSeg button').forEach(b => b.classList.toggle('on', b.dataset.base === key));
+  document.querySelectorAll('#baseSeg button').forEach(b => {
+    b.classList.toggle('on', b.dataset.base === key);
+    b.setAttribute('aria-pressed', String(b.dataset.base === key));
+  });
 }
 // ถ้าแผนที่ฐานสีเทาโหลดไม่ได้ เปลี่ยนเป็น OpenStreetMap ให้อัตโนมัติ
 bases.gray.eachLayer(l => l.on('tileerror', () => {
@@ -435,39 +786,177 @@ const LocateControl = L.Control.extend({
     a.title = 'ตำแหน่งของฉัน';
     a.setAttribute('role', 'button');
     a.setAttribute('aria-label', 'ไปยังตำแหน่งของฉัน');
-    a.innerHTML = '<svg class="icon" viewBox="0 0 24 24"><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="1.5"/></svg>';
+    a.innerHTML = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="1.5"/></svg>';
     L.DomEvent.disableClickPropagation(box);
     L.DomEvent.on(a, 'click', e => { L.DomEvent.preventDefault(e); map.locate({ setView: true, maxZoom: 13 }); });
     return box;
   }
 });
 map.addControl(new LocateControl());
-map.on('locationerror', () => setStatus('ระบุตำแหน่งไม่ได้ (ตรวจสิทธิ์ตำแหน่งในเบราว์เซอร์)'));
+map.on('locationerror', () => setStatus('ระบุตำแหน่งไม่ได้ (ตรวจสิทธิ์ตำแหน่งในเบราว์เซอร์)', 'warn'));
 
-function setStatus(t) { $('status').textContent = t; $('status').title = t; }
-
-// เรียก API แล้วแปลงปัญหาให้เป็นข้อความที่บอกสาเหตุ
-const NET_MSG = 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ตรวจว่าหน้าต่าง cmd ที่รัน python app.py ยังเปิดอยู่';
-async function api(url, opts) {
-  let r;
-  try { r = await fetch(url, opts); }
-  catch (e) { throw new Error(NET_MSG); }
-  let d;
-  try { d = await r.json(); }
-  catch (e) { throw new Error(`เซิร์ฟเวอร์ตอบกลับผิดรูปแบบ (รหัส ${r.status}) ดูข้อความ error ในหน้าต่าง cmd`); }
-  if (!r.ok) throw new Error(d.error || `ผิดพลาด (รหัส ${r.status})`);
-  return d;
+// ปุ่ม "สัญลักษณ์" (เฉพาะจอเล็ก) เปิด/ปิดกล่องสัญลักษณ์
+const LegendControl = L.Control.extend({
+  options: { position: 'topleft' },
+  onAdd() {
+    const box = L.DomUtil.create('div', 'leaflet-bar lg-ctl');
+    const a = L.DomUtil.create('a', 'lg-btn', box);
+    a.href = '#';
+    a.id = 'legendBtn';
+    a.setAttribute('role', 'button');
+    a.setAttribute('aria-expanded', 'false');
+    a.setAttribute('aria-controls', 'legend');
+    a.textContent = 'สัญลักษณ์';
+    L.DomEvent.disableClickPropagation(box);
+    L.DomEvent.on(a, 'click', e => { L.DomEvent.preventDefault(e); toggleLegend(); });
+    return box;
+  }
+});
+map.addControl(new LegendControl());
+function toggleLegend(open) {
+  const on = open == null ? !document.body.classList.contains('legend-open') : open;
+  document.body.classList.toggle('legend-open', on);
+  const a = $('legendBtn');
+  if (a) a.setAttribute('aria-expanded', String(on));
 }
 
-// ---------- ชั้นข้อมูล ----------
+function setStatus(t, kind) {
+  const s = $('status');
+  s.textContent = t || '';
+  s.title = t || '';
+  s.dataset.kind = kind || '';
+}
+
+// =============================================================== เรียก API
+const NET_MSG = 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้';
+class ApiError extends Error {
+  constructor(msg, net) { super(msg); this.net = !!net; }
+}
+const hasThai = m => /[฀-๿]/.test(String(m || ''));
+const isAbort = e => !!e && e.name === 'AbortError';
+function abortError() {
+  try { return new DOMException('aborted', 'AbortError'); } catch (e) { const x = new Error('aborted'); x.name = 'AbortError'; return x; }
+}
+async function api(url, opts) {
+  const signal = opts && opts.signal;
+  let r;
+  try { r = await fetch(url, opts); }
+  catch (e) { if (isAbort(e) || (signal && signal.aborted)) throw abortError(); throw new ApiError(NET_MSG, true); }
+  let d = null;
+  try { d = await r.json(); } catch (e) { if (signal && signal.aborted) throw abortError(); d = null; }
+  if (d == null) throw new ApiError(r.status >= 500 ? 'เซิร์ฟเวอร์ยังไม่พร้อม' : 'เซิร์ฟเวอร์ตอบกลับผิดรูปแบบ', r.status >= 500);
+  if (!r.ok) {
+    const m = d && d.error;
+    if (m && !hasThai(m)) console.warn('API error', url, m);
+    throw new ApiError(hasThai(m) ? m : 'เกิดข้อผิดพลาดที่เซิร์ฟเวอร์', r.status >= 502);
+  }
+  return d;
+}
+function errMsg(err) {
+  const m = (err && err.message) || '';
+  return hasThai(m) ? m : 'เกิดข้อผิดพลาด';
+}
+// ข้อความผิดพลาดใส่ด้วย textContent เสมอ (ไม่ผ่าน innerHTML)
+function errorBox(err, what, inline) {
+  const box = document.createElement(inline ? 'div' : 'div');
+  box.className = inline ? 'err-inline' : 'state err';
+  box.setAttribute('role', 'alert');
+  const msg = document.createElement(inline ? 'p' : 'span');
+  if (inline) msg.className = 'warn';
+  msg.textContent = errMsg(err);
+  box.appendChild(msg);
+  if (what) {
+    const b = document.createElement('button');
+    b.className = 'mini';
+    b.dataset.act = 'retry';
+    b.dataset.what = what;
+    b.textContent = 'ลองใหม่อีกครั้ง';
+    box.appendChild(b);
+  }
+  return box;
+}
+function showError(el, err, what) { el.replaceChildren(errorBox(err, what)); }
+// ในเทมเพลต HTML ใส่ช่องว่างไว้ก่อน แล้วค่อยเติมข้อความผิดพลาดด้วย textContent
+const errSlots = new Map();
+let errSlotId = 0;
+function errSlot(err, what, inline) {
+  const id = 'e' + (++errSlotId);
+  errSlots.set(id, { err, what, inline });
+  return `<div data-err-slot="${id}"></div>`;
+}
+function setHTML(el, html) {
+  el.innerHTML = html;
+  el.querySelectorAll('[data-err-slot]').forEach(n => {
+    const e = errSlots.get(n.dataset.errSlot);
+    errSlots.delete(n.dataset.errSlot);
+    if (e) n.replaceWith(errorBox(e.err, e.what, e.inline)); else n.remove();
+  });
+}
+const fastNote = d => (d && d.fast === false ? `<p class="fastnote">${CLOCK_SVG}${FAST_NOTE}</p>` : '');
+
+// ---------- บริบทของคำขอ ----------
+// จับสถานะตอนส่งคำขอ (พื้นที่ ปี ฤดู มุมมอง แท็บ) ใช้ตรวจทั้งตอนสำเร็จและตอนผิดพลาด
+// และยกเลิกคำขอเดิมของกลุ่มเดียวกันเมื่อมีคำขอใหม่ (เปลี่ยนพื้นที่ ปี ฤดู หรือแท็บ)
+const ctls = {};
+function abortScope(scope) { if (ctls[scope]) { ctls[scope].abort(); ctls[scope] = null; } }
+function newCtx(scope) {
+  abortScope(scope);
+  const ctl = new AbortController();
+  ctls[scope] = ctl;
+  const snap = { seq, cmpSeq, year: state.year, season: state.season, view: state.view, tab: state.tab, yearView: state.yearView, histView: state.histView, layer: state.layer };
+  return {
+    signal: ctl.signal,
+    snap,
+    live() {
+      if (ctl.signal.aborted) return false;
+      if (scope === 'cmp') return snap.cmpSeq === cmpSeq && cmpOpen() && snap.year === state.year && snap.season === state.season;
+      if (scope === 'tiles') return snap.layer === state.layer && snap.year === state.year && snap.season === state.season;
+      if (scope === 'shape') return snap.seq === seq;
+      return snap.seq === seq && state.view === 'area' && state.tab === snap.tab && snap.season === state.season &&
+        (snap.tab === 'history' || snap.year === state.year) &&
+        (snap.tab !== 'year' || snap.yearView === state.yearView) &&
+        (snap.tab !== 'history' || snap.histView === state.histView);
+    }
+  };
+}
+
+// ข้อมูลของพื้นที่ที่เลือกเก็บไว้ตามพื้นที่ (ล้างเมื่อเปลี่ยนพื้นที่) ข้อมูลเทียบ 2 เมืองเก็บแยก
+// เก็บเป็น promise เพื่อไม่ส่งคำขอซ้ำ แต่ไม่ใช้ซ้ำถ้าคำขอนั้นถูกยกเลิกไปแล้ว
+let cache = {};
+const cmpCache = {};
+function getData(name, url, body, ctx, store, keep) {
+  store = store || cache;
+  const key = name + '|' + JSON.stringify(body);
+  const hit = store[key];
+  if (hit && !(hit.signal && hit.signal.aborted)) return hit.p;
+  const signal = ctx && ctx.signal;
+  const entry = { signal };
+  entry.p = api(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal })
+    .then(d => { if (keep && !keep(d) && store[key] === entry) delete store[key]; else entry.signal = null; return d; },
+      err => { if (store[key] === entry) delete store[key]; throw err; });
+  store[key] = entry;
+  return entry.p;
+}
+
+// =============================================================== ชั้นข้อมูล
+// URL ชั้นแผนที่เก็บไว้ไม่เกิน 30 นาที และผูกกับจำนวนชุดที่คำนวณล่วงหน้าเสร็จแล้ว
+// (เมื่อคำนวณล่วงหน้าคืบหน้า จะขอ URL ใหม่ซึ่งเป็นแบบเร็ว)
+const TILE_TTL = 30 * 60 * 1000;
 const tileCache = {};
 let overlay = null;
-let overlayReq = 0;
+let overlayMinZoom = null;
+let overlayInfo = null;
+let tileTimers = [];
+let precomputeReady = null;
 
 function layerKey() {
   const def = LAYERS[state.layer];
-  if (state.layer === 'built_change') return 'built_change';
-  return [state.layer, state.year, def.season ? state.season : ''].join('|');
+  return [state.layer, def.year ? state.year : '', def.season ? state.season : '', 'pre' + (precomputeReady == null ? '' : precomputeReady)].join('|');
+}
+function removeOverlay() {
+  tileTimers.forEach(clearTimeout);
+  tileTimers = [];
+  if (overlay) { map.removeLayer(overlay); overlay = null; }
 }
 
 function buildLayerList() {
@@ -477,14 +966,22 @@ function buildLayerList() {
     const lab = document.createElement('label');
     lab.className = 'layer-opt' + (key === state.layer ? ' active' : '');
     lab.innerHTML = `<input type="radio" name="layer" value="${key}" ${key === state.layer ? 'checked' : ''}>` +
-      `<b>${def.name}</b><small>${def.desc}</small>`;
-    lab.querySelector('input').addEventListener('change', () => {
-      state.layer = key;
-      box.querySelectorAll('.layer-opt').forEach(el => el.classList.toggle('active', el === lab));
-      loadOverlay();
-    });
+      `<b>${esc(def.name)}</b><small>${esc(def.desc)}</small>`;
+    lab.querySelector('input').addEventListener('change', () => setLayer(key));
     box.appendChild(lab);
   });
+}
+
+function setLayer(key) {
+  if (!LAYERS[key]) return;
+  state.layer = key;
+  document.querySelectorAll('#layerList .layer-opt').forEach(el => {
+    const inp = el.querySelector('input');
+    inp.checked = inp.value === key;
+    el.classList.toggle('active', inp.checked);
+  });
+  if (booted) loadOverlay(); else renderLegend();
+  writeHash();
 }
 
 function progress(on) {
@@ -493,66 +990,88 @@ function progress(on) {
   else { p.className = 'done'; }
 }
 
-let overlayMinZoom = null;
 function updateZoomHint() {
   const need = overlayMinZoom != null ? overlayMinZoom : LAYERS[state.layer].minZoom;
   $('zoomHint').hidden = map.getZoom() >= need;
 }
 map.on('zoomend', updateZoomHint);
+$('zoomHint').addEventListener('click', () => {
+  const need = overlayMinZoom != null ? overlayMinZoom : LAYERS[state.layer].minZoom;
+  map.setZoom(Math.max(need, map.getZoom() + 1));
+});
 
-function dataNote(d) {
+function tileNote(d) {
   const parts = [];
   if (d.source) parts.push(`อุณหภูมิ ${srcLabel(d.source)} ปี ${d.year} (${seasonShort()})`);
-  if (d.dw_year) parts.push(`พื้นผิว Dynamic World ${d.dw_year}`);
+  if (d.dw_year) parts.push(`พื้นผิว Dynamic World ${d.dw_year}` + (state.year < cfg.dw_first_year ? ' (ปีแรกที่มี)' : ''));
   if (d.pop_epoch) parts.push(`ประชากร GHSL ${d.pop_epoch}`);
-  return parts.join(' · ');
+  if (state.layer === 'plant') parts.unshift('ESA WorldCover 2021');
+  if (state.layer === 'built_change') parts.push('GHSL 2005→2020');
+  let t = parts.join(' · ') || LAYERS[state.layer].name;
+  if (d.fast === false) t = FAST_NOTE + ' · ' + t;
+  return t;
 }
 
 async function loadOverlay() {
   const key = layerKey();
-  const req = ++overlayReq;
+  const ctx = newCtx('tiles');
+  const def = LAYERS[state.layer];
   renderLegend();
   overlayMinZoom = null;
+  overlayInfo = null;
   updateZoomHint();
-  if (overlay) { map.removeLayer(overlay); overlay = null; }
+  removeOverlay();
   setStatus('กำลังเตรียมชั้นข้อมูล…');
   progress(true);
   try {
-    let d = tileCache[key];
+    const hit = tileCache[key];
+    let d = hit && Date.now() - hit.t < TILE_TTL ? hit.d : null;
     if (!d) {
+      delete tileCache[key];
       const q = new URLSearchParams({ layer: state.layer, year: state.year, season: state.season });
-      d = await api('/api/tiles?' + q);
-      if (!d.url) throw new Error('เซิร์ฟเวอร์ยังเป็น app.py เวอร์ชันเก่า ให้แทนที่ไฟล์แล้วรัน python app.py ใหม่');
-      tileCache[key] = d;
+      d = await api('/api/tiles?' + q, { signal: ctx.signal });
+      if (!d.url) throw new ApiError('เซิร์ฟเวอร์ไม่ได้ส่งชั้นข้อมูลนี้มา ลองใหม่อีกครั้ง');
+      tileCache[key] = { d, t: Date.now() };
     }
-    if (req !== overlayReq) return;
-    overlayMinZoom = d.min_zoom != null ? d.min_zoom : LAYERS[state.layer].minZoom;
+    if (!ctx.live()) return;
+    overlayInfo = d;
+    overlayMinZoom = isNum(d.min_zoom) ? d.min_zoom : def.minZoom;
     updateZoomHint();
-    overlay = L.tileLayer(d.url, { opacity: state.opacity, minZoom: overlayMinZoom, maxZoom: 19 });
-    let pending = 0;
-    overlay.on('loading', () => progress(true));
-    overlay.on('load', () => progress(false));
+    renderLegend(d);
+    const opts = { opacity: state.opacity, minZoom: overlayMinZoom, maxZoom: 19 };
+    // ชั้นข้อมูลละเอียด 1 กม. ไม่ต้องขอช่องแผนที่ซูมลึกกว่านี้ (ขยายจากระดับ 12 แทน ประหยัดโควตา Earth Engine)
+    if (def.nativeMax) opts.maxNativeZoom = def.nativeMax;
+    const me = L.tileLayer(d.url, opts);
+    overlay = me;
+    let failed = 0;
+    me.on('loading', () => { if (overlay === me) progress(true); });
+    me.on('load', () => { if (overlay === me) progress(false); });
     // ช่องแผนที่ที่คำนวณไม่ทัน ลองโหลดใหม่อัตโนมัติสูงสุด 3 ครั้ง (Earth Engine มักคำนวณต่อจนเสร็จ)
-    overlay.on('tileerror', e => {
+    me.on('tileerror', e => {
+      if (overlay !== me) return;
       const img = e.tile;
       const tries = +(img.dataset.tries || 0);
       if (tries < 3) {
         img.dataset.tries = tries + 1;
         const url = img.src;
-        setTimeout(() => { img.src = ''; img.src = url; }, 2500 * (tries + 1));
+        const id = setTimeout(() => {
+          tileTimers = tileTimers.filter(x => x !== id);
+          if (overlay !== me || !img.isConnected) return;
+          img.src = '';
+          img.src = url;
+        }, 2500 * (tries + 1));
+        tileTimers.push(id);
         return;
       }
-      if (pending++ === 0) setStatus('บางส่วนของแผนที่ยังคำนวณไม่เสร็จ ระบบกำลังเตรียมข้อมูลล่วงหน้า ลองซูมเข้าหรือกลับมาอีกครั้งภายหลัง');
+      if (failed++ === 0) setStatus('บางช่องของแผนที่ยังคำนวณไม่เสร็จ ลองซูมเข้า หรือรอสักครู่แล้วเลื่อนแผนที่', 'warn');
     });
-    overlay.addTo(map);
+    me.addTo(map);
     if (map.getZoom() < overlayMinZoom) progress(false);
-    let note = dataNote(d);
-    if (d.dw_year && state.year < cfg.dw_first_year) note += ` (ก่อนปี ${cfg.dw_first_year} ใช้ข้อมูลพื้นผิวปีแรกที่มี)`;
-    setStatus(note || LAYERS[state.layer].name);
+    setStatus(tileNote(d), d.fast === false ? 'warn' : '');
   } catch (err) {
-    if (req !== overlayReq) return;
+    if (isAbort(err) || !ctx.live()) return;
     progress(false);
-    setStatus(errMsg(err));
+    setStatus(errMsg(err) + ' · ลองเลือกชั้นข้อมูลอีกครั้ง', 'err');
   }
 }
 
@@ -560,9 +1079,7 @@ $('opacity').addEventListener('input', e => {
   state.opacity = +e.target.value;
   if (overlay) overlay.setOpacity(state.opacity);
 });
-
 document.querySelectorAll('#baseSeg button').forEach(btn => btn.addEventListener('click', () => setBase(btn.dataset.base)));
-
 $('layerToggle').addEventListener('click', () => {
   const el = $('layers');
   el.classList.toggle('collapsed');
@@ -577,38 +1094,64 @@ function lstRows() {
   const t = [`ต่ำกว่า ${b[0]} °C`, ...b.slice(0, -1).map((v, i) => `${v}–${b[i + 1]} °C`), `${b[b.length - 1]} °C ขึ้นไป`];
   return t.map((x, i) => `<div class="row"><span class="sw" style="background:${cfg.lst_palette[i]}"></span>${x} · ${LEVEL_NAMES[i]}</div>`).join('');
 }
-
+const swRow = (color, html) => `<div class="row"><span class="sw" style="background:${color}"></span><span>${html}</span></div>`;
 function gradient(colors, left, right) {
   return `<div class="grad" style="background:linear-gradient(90deg,${colors.join(',')})"></div><div class="ends"><span>${left}</span><span>${right}</span></div>`;
 }
-
-function renderLegend() {
+function renderLegend(d) {
   const c = cfg.prio_colors;
+  const dw = d && d.dw_year ? ` ปี ${d.dw_year}` : '';
   const html = {
     priority: `<h4>ย่านที่ควรปรับปรุง</h4>
-      <div class="row"><span class="sw" style="background:${c[2]}"></span>เร่งด่วน · มีที่โล่งทำพื้นที่สีเขียวได้</div>
-      <div class="row"><span class="sw" style="background:${c[1]}"></span>เร่งด่วน · ไม่มีที่โล่ง ต้องใช้วิธีอื่น</div>
-      <div class="row"><span class="sw" style="background:${c[0]}"></span>เฝ้าระวัง · ร้อนและมีคนอยู่</div>
-      <small>เร่งด่วน = ช่วงบ่ายเกิน ${cfg.very_hot} °C, คนอยู่ ${nf(cfg.pop_dense)} คน/ตร.กม. ขึ้นไป, พื้นที่สีเขียวไม่ถึง ${Math.round(cfg.green_low * 100)}%</small>`,
-    lst: `<h4>อุณหภูมิพื้นผิวช่วงบ่าย (12–14 น.)</h4>${lstRows()}<small>ระดับสีเพื่อให้เห็นภาพ ไม่ใช่เกณฑ์ทางการ</small>`,
-    green: `<h4>พื้นที่สีเขียว</h4>${gradient(['#d9f0a3', '#78c679', '#238443', '#004529'], 'เขียวบางส่วน', 'เขียวเต็มพื้นที่')}`,
-    open: `<h4>ที่โล่งในย่านที่มีคนอยู่</h4><div class="row"><span class="sw" style="background:#c8873a"></span>พุ่มไม้ ทุ่งหญ้า ดินเปล่า (10 ม.)</div><small>จาก ESA WorldCover 2021 · เป็นจุดที่น่าตรวจสอบ ไม่ได้บอกว่าเป็นที่ว่างที่ใช้ได้จริง</small>`,
-    built: `<h4>สิ่งปลูกสร้างและถนน</h4>${gradient(['#dadaeb', '#9e9ac8', '#6a51a3', '#3f007d'], 'บางส่วน', 'หนาแน่น')}`,
-    built_change: `<h4>สิ่งปลูกสร้างที่เพิ่มขึ้น 2005 → 2020</h4>${gradient(['#fde0ef', '#f1b6da', '#de77ae', '#c51b7d', '#8e0152'], '+2 จุด', '+40 จุดขึ้นไป')}<small>จุดเปอร์เซ็นต์ของพื้นที่อาคารต่อเซลล์ 100 ม.</small>`
+      ${swRow(c[1], '<b>เร่งด่วน</b> · ผิวร้อนมาก คนหนาแน่น สีเขียวน้อย')}
+      ${swRow(c[0], '<b>เฝ้าระวัง</b> · ผิวร้อนและมีคนอยู่')}
+      <small>ดูว่าย่านเร่งด่วนมีที่ว่างปลูกต้นไม้หรือไม่ได้ที่ชั้น <button class="link" data-layer="plant">“พื้นที่ปลูกต้นไม้เพิ่มได้”</button> และในแผงข้อมูล</small>`,
+    lst: `<h4>อุณหภูมิพื้นผิวช่วงบ่าย</h4>${lstRows()}<small>ระดับของอุณหภูมิพื้นผิว ไม่ใช่เกณฑ์อากาศร้อนของกรมอุตุนิยมวิทยา</small>`,
+    green: `<h4>พื้นที่สีเขียว</h4>${swRow(LAYER_COLORS.tree, 'ต้นไม้')}${swRow(LAYER_COLORS.grass, 'หญ้าและพุ่มไม้')}<small>Dynamic World${dw} · ประเภทที่พบบ่อยที่สุดของปี</small>`,
+    plant: `<h4>พื้นที่ปลูกต้นไม้เพิ่มได้</h4>${swRow(LAYER_COLORS.plant, 'หญ้า พุ่มไม้ ดินเปล่า ในย่านที่มีคนอยู่')}<small>ESA WorldCover 2021 · เป็นจุดที่น่าตรวจสอบ ต้องดูเจ้าของที่ดินและแผนการใช้ที่ดินก่อน</small>`,
+    built: `<h4>สิ่งปลูกสร้างและถนน</h4>${swRow(LAYER_COLORS.built, 'อาคาร ถนน ลานคอนกรีต')}<small>Dynamic World${dw} · ประเภทที่พบบ่อยที่สุดของปี</small>`,
+    built_change: `<h4>สิ่งปลูกสร้างที่เพิ่มขึ้น 2005→2020</h4>${gradient(['#fde0ef', '#f1b6da', '#de77ae', '#c51b7d', '#8e0152'], '+2 จุด', '+40 จุดขึ้นไป')}<small>จุดเปอร์เซ็นต์ของพื้นที่อาคาร ช่องละ 100 ม. (GHSL)</small>`
   };
-  $('legend').innerHTML = html[state.layer];
+  $('legend').innerHTML = html[state.layer] || '';
 }
+$('legend').addEventListener('click', e => {
+  const b = e.target.closest('[data-layer]');
+  if (b) setLayer(b.dataset.layer);
+});
+L.DomEvent.disableClickPropagation($('legend'));
+L.DomEvent.disableScrollPropagation($('legend'));
 
 // =============================================================== แผงข้อมูล
 let focusLayer = null;
 let seq = 0;
-let cache = {};
-const charts = { year: null, history: null };
+const last = {};   // ข้อมูลล่าสุดของแต่ละแท็บ (ใช้ดาวน์โหลด CSV)
 
 function setPanel(open) {
+  state.panel = open;
   document.body.classList.toggle('panel-open', open);
-  $('btnPanel').classList.toggle('on', open);
-  if (open) setTimeout(() => Object.values(charts).forEach(c => c && c.resize()), 0);
+  if (!open) leaveCompare();
+  syncButtons();
+  writeHash();
+}
+function setSheet(expanded) {
+  document.body.classList.toggle('sheet-min', !expanded);
+  $('sheetHandle').setAttribute('aria-expanded', String(expanded));
+}
+function syncButtons() {
+  $('btnCompare').setAttribute('aria-pressed', String(cmpOpen()));
+  $('btnPanel').classList.toggle('on', state.panel && state.view === 'area');
+  $('btnPanel').setAttribute('aria-expanded', String(state.panel));
+}
+function openCompare() {
+  state.view = 'compare';
+  setPanel(true);
+  setSheet(true);
+  refreshPanel();
+}
+function openArea() {
+  state.view = 'area';
+  setPanel(true);
+  refreshPanel();
 }
 
 function setFocusLayer(layer) {
@@ -619,20 +1162,29 @@ function setFocusLayer(layer) {
 function newFocus(payload, title) {
   seq++;
   cache = {};
-  state.focus = { payload, title };
-  $('pTitle').textContent = title;
+  abortScope('area');
+  abortScope('shape');
+  state.focus = { payload, title, province: payload.province || null };
+  state.view = 'area';
   setPanel(true);
+  setSheet(true);
   refreshPanel();
 }
 
-function updateSub() {
-  $('pSub').textContent = state.focus
-    ? `ปี ${state.year} · ${cfg.seasons[state.season]}`
-    : 'คลิกแผนที่ วาดพื้นที่ หรือเลือกจังหวัด';
+function updateHead() {
+  if (state.view === 'compare') {
+    $('pTitle').textContent = cmpTitle();
+    $('pSub').textContent = `ปี ${state.year} · ${seasonFull()}`;
+    return;
+  }
+  $('pTitle').textContent = state.focus ? state.focus.title : 'ยังไม่ได้เลือกพื้นที่';
+  $('pSub').textContent = !state.focus ? 'คลิกแผนที่ วาดพื้นที่ หรือเลือกจังหวัด'
+    : state.tab === 'history' ? `ปี ${cfg.first_year}–${cfg.last_year} · ${seasonFull()}`
+    : `ปี ${state.year} · ${seasonFull()}`;
 }
 
 function loading(el, text) {
-  el.innerHTML = `<div class="loader"><div class="spin"></div><div class="lt">${text}</div></div>`;
+  el.innerHTML = `<div class="loader"><div class="spin"></div><div class="lt">${esc(text)}</div></div>`;
   const t0 = Date.now();
   const lt = el.querySelector('.lt');
   const timer = setInterval(() => {
@@ -642,28 +1194,35 @@ function loading(el, text) {
   return () => clearInterval(timer);
 }
 
-async function getData(name, url, body) {
-  const key = `${name}|${JSON.stringify(body)}`;
-  if (cache[key]) return cache[key];
-  const d = await api(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  cache[key] = d;
-  return d;
-}
-
-function errMsg(err) {
-  const m = (err && err.message) || String(err);
-  return /[฀-๿]/.test(m) ? m : 'ผิดพลาด: ' + m;
-}
+// ผลที่ได้ต้องตรงกับปีและฤดูที่ขอไป (กันกรณีเซิร์ฟเวอร์ตอบผิดชุด)
+const matches = (d, ctx) => d && (d.season === undefined || d.season === ctx.snap.season) && (d.year === undefined || d.year === ctx.snap.year);
 
 function refreshPanel() {
-  updateSub();
-  ['overview', 'year', 'history'].forEach(t => { $('tab-' + t).hidden = t !== state.tab; });
-  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === state.tab));
+  const isCmp = state.view === 'compare';
+  document.body.classList.toggle('view-compare', isCmp);
+  $('btnBack').hidden = !isCmp;
+  $('tabs').hidden = isCmp;
+  $('view-area').hidden = isCmp;
+  $('view-compare').hidden = !isCmp;
+  syncButtons();
+  updateHead();
+  writeHash();
+  if (isCmp) { loadCompare(); return; }
+  leaveCompare();
+  TABS.forEach(t => {
+    $('tab-' + t).hidden = t !== state.tab;
+    const b = $('t-' + t);
+    b.setAttribute('aria-selected', String(t === state.tab));
+    b.tabIndex = t === state.tab ? 0 : -1;
+  });
   if (!state.focus) {
-    $('tab-overview').innerHTML = `<div class="empty">เลือกพื้นที่เพื่อดูว่าย่านไหนร้อน มีคนอยู่เท่าไหร่<br>และมีที่โล่งพอจะเพิ่มพื้นที่สีเขียวหรือไม่<br><br>
-      คลิกจุดบนแผนที่ (วิเคราะห์รัศมี ${cfg.point_radius_m / 1000} กม.) วาดพื้นที่ หรือเลือกจังหวัด</div>`;
+    abortScope('area');
+    ['year', 'history', 'hist2'].forEach(killChart);
+    $('tab-overview').innerHTML = `<div class="empty">เลือกพื้นที่เพื่อดูว่าย่านไหนร้อน มีคนอยู่เท่าไร<br>และมีที่ว่างพอปลูกต้นไม้เพิ่มหรือไม่<br><br>
+      คลิกจุดบนแผนที่ (วิเคราะห์รัศมี ${cfg.point_radius_m / 1000} กม.) วาดพื้นที่ หรือเลือกจังหวัด</div>
+      <button class="btn-cmp" data-act="compare" style="width:100%;height:auto;min-height:48px;padding:10px 14px;white-space:normal">
+        <span class="pair" aria-hidden="true"><i></i><i></i></span>ดูผลการศึกษา: ${esc(cmpCities().map(c => cityShort(c.en)).join(' vs '))} →</button>`;
     ['yearOut', 'histOut'].forEach(id => { $(id).innerHTML = '<div class="empty">ยังไม่ได้เลือกพื้นที่</div>'; });
-    ['yearChartWrap', 'histChartWrap', 'yearNote', 'histNote'].forEach(id => { $(id).hidden = true; });
     return;
   }
   if (state.tab === 'overview') loadOverview();
@@ -672,292 +1231,865 @@ function refreshPanel() {
 }
 
 // ---------- ตรวจสอบการปรับเทียบ VIIRS ----------
-async function appendValidation(el, my, tabName) {
+async function appendValidation(el, ctx) {
   try {
-    const v = await getData('validate', '/api/validate', { ...state.focus.payload, season: state.season });
-    if (my !== seq || state.tab !== tabName || !v.ready || !v.count || v.mean == null) return;
-    const sign = v.mean >= 0 ? '+' : '−';
-    el.insertAdjacentHTML('beforeend', `<p class="note">ตรวจสอบการปรับเทียบ VIIRS: ในปี ${v.years[0]}–${String(v.years[1]).slice(2)} ซึ่งไม่ได้ใช้ตอนปรับเทียบ ค่า VIIRS ที่ปรับแล้วต่างจาก Aqua เฉลี่ย ${sign}${f1(Math.abs(v.mean))} °C (คลาดเคลื่อนเฉลี่ยรายช่อง ${f1(v.mae)} °C) ในย่านที่มีคนอยู่ของพื้นที่นี้</p>`);
-  } catch (err) { /* ไม่จำเป็นต้องแจ้ง */ }
+    const v = await getData('validate', '/api/validate', { ...state.focus.payload, season: ctx.snap.season }, ctx);
+    if (!ctx.live() || !el || !el.isConnected || !v.ready || !v.count || !isNum(v.mean)) return;
+    const yrs = v.years || cfg.check_years, by = v.bias_years || cfg.bias_years;
+    el.insertAdjacentHTML('beforeend', `<p class="note">ตรวจสอบการปรับเทียบ VIIRS: ปรับเทียบจากวันที่สองดาวเทียมวัดตรงกันในปี ${by[0]}–${by[1]} แล้วทดสอบกับปี ${yrs[0]}–${yrs[1]} ซึ่งไม่ได้ใช้ตอนปรับ ค่า VIIRS ที่ปรับแล้วต่างจาก Aqua เฉลี่ย ${sgn(v.mean)} °C (คลาดเคลื่อนเฉลี่ยรายช่อง ${isNum(v.mae) ? num(v.mae) : '–'} °C) ในย่านที่มีคนอยู่ของพื้นที่นี้</p>`);
+  } catch (err) { /* หมายเหตุเสริม ไม่จำเป็นต้องแจ้งเมื่อโหลดไม่ได้ */ }
 }
 
 // ---------- แท็บ: ภาพรวม ----------
 async function loadOverview() {
-  const my = seq, el = $('tab-overview');
+  const ctx = newCtx('area'), el = $('tab-overview');
   const stop = loading(el, 'กำลังคำนวณภาพรวมของพื้นที่');
   el.insertAdjacentHTML('beforeend', '<div class="skel" style="width:70%"></div><div class="skel"></div><div class="skel" style="width:85%"></div>');
   try {
-    const d = await getData('summary', '/api/summary', { ...state.focus.payload, year: state.year, season: state.season });
-    if (my !== seq || state.tab !== 'overview' || !sameYS(d)) return;
+    const d = await getData('summary', '/api/summary', { ...state.focus.payload, year: ctx.snap.year, season: ctx.snap.season }, ctx);
+    if (!ctx.live() || !matches(d, ctx)) return;
+    last.summary = d;
     el.innerHTML = renderOverview(d);
-    if (d.source === 'VIIRS') appendValidation(el, my, 'overview');
+    if (d.source === 'VIIRS') appendValidation($('ovNotes'), ctx);
   } catch (err) {
-    if (my === seq && state.tab === 'overview') el.innerHTML = `<div class="empty">${errMsg(err)}</div>`;
+    if (!isAbort(err) && ctx.live()) showError(el, err, 'area');
   } finally { stop(); }
 }
 
-function sameYS(d) { return d.year === undefined || (d.year === state.year && d.season === state.season); }
-
-function coverOf(d) {
-  const lived = d.cover_lived || {};
-  const ok = COVER.some(([k]) => lived[k] != null);
-  return ok ? { c: lived, scope: 'ในย่านที่มีคนอยู่' } : { c: d.cover_all || {}, scope: 'ทั้งพื้นที่ที่เลือก' };
+const levelChip = lv => `<span class="lvl" style="background:${cfg.lst_palette[lv]};color:${textOn(cfg.lst_palette[lv])}">${LEVEL_NAMES[lv]}</span>`;
+function prioOf(d) {
+  const p = Array.isArray(d.prio) ? d.prio : [];
+  const get = i => {
+    const r = p.find(x => x && x.cls === i) || p[i] || {};
+    return { people: r.people || 0, area_km2: r.area_km2 || 0, plant_km2: r.plant_km2 || 0 };
+  };
+  const p1 = get(1), p2 = get(2), p3 = get(3);
+  return { p1, p2, p3, uA: p2.area_km2 + p3.area_km2, uP: p2.people + p3.people };
 }
+// สัดส่วนคิดจากผู้อยู่อาศัยทั้งหมด (pop_total) ส่วนที่อยู่ในช่องไม่มีข้อมูลอุณหภูมิแยกไว้ต่างหาก
+function hotPeople(d) {
+  const ex = Array.isArray(d.expo) ? d.expo : [];
+  const classified = ex.reduce((a, r) => a + (r.people || 0), 0);
+  const hot = ex.filter(r => r.level >= cfg.hot_level).reduce((a, r) => a + (r.people || 0), 0);
+  const total = Math.max(isNum(d.pop_total) ? d.pop_total : 0, classified);
+  const noData = Math.max(0, total - classified);
+  return { ex, classified, hot, total, noData, pct: pctOf(hot, total), noDataPct: pctOf(noData, total), showNoData: total > 0 && noData / total >= 0.005 };
+}
+const pctText = p => (p < 1 ? 'ไม่ถึง 1' : String(p));
 
 function renderOverview(d) {
-  const pc = cfg.prio_colors;
-  let html = '';
+  const red = cfg.prio_colors[1], amber = cfg.prio_colors[0];
+  let html = fastNote(d);
 
   // อุณหภูมิในย่านที่มีคนอยู่
-  if (d.lst_lived != null) {
-    const lv = levelOf(d.lst_lived);
-    const fg = lv === 0 || lv === 4 ? '#fff' : '#1d2327';
-    html += `<section class="hero"><div><div class="temp">${f1(d.lst_lived)}<small> °C</small></div>
-      <span class="lvl" style="background:${cfg.lst_palette[lv]};color:${fg}">${LEVEL_NAMES[lv]}</span></div>
-      <p>อุณหภูมิพื้นผิวช่วงบ่ายเฉลี่ย<br>ในย่านที่มีคนอยู่ (${seasonShort()} ปี ${d.year})</p></section>`;
+  if (isNum(d.lst_lived)) {
+    html += `<section class="hero"><div><div class="temp">${num(d.lst_lived)}<small> °C</small></div>${levelChip(levelOf(d.lst_lived))}</div>
+      <p>อุณหภูมิพื้นผิวช่วงบ่ายเฉลี่ย<br>ในย่านที่มีคนอยู่ (${esc(seasonShort())} ปี ${d.year})</p></section>`;
   } else {
-    html += `<section class="hero"><p>ไม่มีข้อมูลอุณหภูมิในย่านที่มีคนอยู่ อาจเพราะเมฆบังทั้งช่วง หรือพื้นที่นี้แทบไม่มีคนอาศัย${state.season === 'wet' ? ' (หน้าฝนมีเมฆมาก ลองเลือกทั้งปีหรือหน้าแล้ง)' : ''}</p></section>`;
+    html += `<section class="hero"><p>ไม่มีข้อมูลอุณหภูมิในย่านที่มีคนอยู่ อาจเพราะเมฆบังเกือบทั้งช่วง หรือพื้นที่นี้แทบไม่มีคนอาศัย${state.season === 'wet' ? ' (หน้าฝนมีเมฆมาก ลองเลือกทั้งปีหรือฤดูอื่น)' : ''}</p></section>`;
   }
 
-  // ความเร่งด่วน
-  const p = d.prio;
-  const urgentArea = p[2].area_km2 + p[3].area_km2;
-  const urgentPeople = p[2].people + p[3].people;
+  // ย่านที่ควรปรับปรุง
+  const { p1, p2, p3, uA, uP } = prioOf(d);
   let lead;
-  if (urgentArea >= 0.5) {
-    lead = `พบย่านเร่งด่วนประมาณ <b>${nf(urgentArea)} ตร.กม.</b> มีคนอาศัยราว <b>${nfP(urgentPeople)}</b>`;
-    if (p[3].area_km2 >= 0.5) lead += ` ในนี้ ${nf(p[3].area_km2)} ตร.กม. ยังมีที่โล่งรวมราว <b>${p[3].open_km2.toFixed(1)} ตร.กม.</b> ที่อาจเริ่มทำเป็นพื้นที่สีเขียวได้ก่อน`;
-    if (p[2].area_km2 >= 0.5) lead += ` ส่วนอีก ${nf(p[2].area_km2)} ตร.กม. แทบไม่มีที่โล่ง ต้องใช้วิธีอื่น เช่น ต้นไม้ริมถนน หลังคาเขียว หรือหลังคาสีอ่อน`;
-  } else if (p[1].area_km2 >= 0.5) {
-    lead = `ยังไม่พบย่านที่เข้าเกณฑ์เร่งด่วน แต่มี <b>${nf(p[1].area_km2)} ตร.กม.</b> ที่ร้อนและมีคนอยู่ ควรเฝ้าระวัง (ราว ${nfP(p[1].people)})`;
+  if (uA >= 0.5) {
+    lead = `พบย่านเร่งด่วนราว <b>${km2(uA)} ตร.กม.</b> มีคนอยู่ราว <b>${nfP(uP)}</b>`;
+    if (p3.area_km2 >= 0.5) lead += ` ในนี้ <b>${km2(p3.area_km2)} ตร.กม.</b> มีพื้นที่ปลูกต้นไม้เพิ่มได้ (ที่ว่างรวมราว ${km2(p3.plant_km2)} ตร.กม.)`;
+    if (p2.area_km2 >= 0.5) lead += ` ส่วนอีก ${km2(p2.area_km2)} ตร.กม. แทบไม่มีที่ว่าง ต้องใช้วิธีอื่น เช่น ต้นไม้ริมถนน หลังคาเขียว หรือหลังคาสีอ่อน`;
+  } else if (p1.area_km2 >= 0.5) {
+    lead = `ยังไม่พบย่านที่เข้าเกณฑ์เร่งด่วน แต่มี <b>${km2(p1.area_km2)} ตร.กม.</b> ที่ผิวร้อนและมีคนอยู่ ควรเฝ้าระวัง (คนราว ${nfP(p1.people)})`;
   } else {
     lead = 'ไม่พบย่านที่เข้าเกณฑ์ในปีและฤดูนี้';
   }
-  const row = (color, title, sub, num) =>
-    `<div class="prio-row"><i style="background:${color}"></i><b>${title}</b><span class="num">${num}</span><span class="sub">${sub}</span></div>`;
+  const row = (color, title, sub, n) =>
+    `<div class="prio-row"><i style="background:${color}"></i><b>${title}</b><span class="num">${n}</span><span class="sub">${sub}</span></div>`;
   html += `<section><h3>ย่านที่ควรปรับปรุง</h3><p class="lead">${lead}</p>
-    ${row(pc[2], 'เร่งด่วน · มีที่โล่ง', `${nfP(p[3].people)} · ที่โล่งรวม ${p[3].open_km2.toFixed(1)} ตร.กม.`, `${nf(p[3].area_km2)} ตร.กม.`)}
-    ${row(pc[1], 'เร่งด่วน · ไม่มีที่โล่ง', `${nfP(p[2].people)}`, `${nf(p[2].area_km2)} ตร.กม.`)}
-    ${row(pc[0], 'เฝ้าระวัง', `${nfP(p[1].people)}`, `${nf(p[1].area_km2)} ตร.กม.`)}
+    ${row(red, `เร่งด่วน · มีพื้นที่ปลูกต้นไม้เพิ่มได้<span class="tag">${TREE_SVG}ปลูกได้</span>`, `คนราว ${nfP(p3.people)} · ที่ว่างรวม ${km2(p3.plant_km2)} ตร.กม.`, `${km2(p3.area_km2)} ตร.กม.`)}
+    ${row(red, 'เร่งด่วน · ไม่มีที่ว่างปลูก', `คนราว ${nfP(p2.people)} · ใช้ต้นไม้ริมถนน หลังคาเขียว หรือหลังคาสีอ่อนแทน`, `${km2(p2.area_km2)} ตร.กม.`)}
+    ${row(amber, 'เฝ้าระวัง', `ผิวร้อนเกิน ${cfg.hot} °C และมีคนอยู่ · คนราว ${nfP(p1.people)}`, `${km2(p1.area_km2)} ตร.กม.`)}
   </section>`;
 
-  // พื้นผิว
-  const { c, scope } = coverOf(d);
-  const tot = COVER.reduce((a, [k]) => a + (c[k] || 0), 0);
-  if (tot > 0) {
-    const segs = COVER.map(([k, n, col]) => `<span style="width:${((c[k] || 0) / tot * 100).toFixed(2)}%;background:${col}" title="${n}"></span>`).join('');
-    const keys = COVER.map(([k, n, col]) => `<span><i style="background:${col}"></i>${n} ${Math.round((c[k] || 0) / tot * 100)}%</span>`).join('');
-    const green = ((c.TREES || 0) + (c.GRASS || 0)) / tot * 100;
-    html += `<section><h3>พื้นผิว${scope}</h3><div class="stack">${segs}</div><div class="keys">${keys}</div>
-      <p class="note">พื้นที่สีเขียว (ต้นไม้ + หญ้า) รวม ${Math.round(green)}% · ข้อมูล Dynamic World ปี ${d.dw_year}</p></section>`;
-  }
+  html += sensTable(d);
+  html += coverSection(d);
+  html += peopleSection(d);
 
-  // คนกับความร้อน
-  const classified = d.expo.reduce((a, r) => a + r.people, 0);
-  if (classified >= 1) {
-    const hot = d.expo.filter(r => r.level >= cfg.hot_level).reduce((a, r) => a + r.people, 0);
-    const segs = d.expo.map(r => `<span style="width:${(r.people / classified * 100).toFixed(2)}%;background:${cfg.lst_palette[r.level]}" title="${LEVEL_NAMES[r.level]}: ${nfP(r.people)}"></span>`).join('');
-    const keys = d.expo.filter(r => r.people >= 1).map(r => `<span><i style="background:${cfg.lst_palette[r.level]}"></i>${LEVEL_NAMES[r.level]} ${Math.round(r.people / classified * 100)}%</span>`).join('');
-    html += `<section><h3>ผู้คนกับความร้อน</h3>
-      <p class="lead">ประชากรราว ${nfP(d.pop_total)} ในจำนวนนี้ <b>${nfP(hot)} (${Math.round(hot / classified * 100)}%)</b> อาศัยในย่านที่ช่วงบ่ายร้อนมากขึ้นไป (เกิน ${cfg.very_hot} °C)</p>
-      <div class="stack">${segs}</div><div class="keys">${keys}</div>
-      <p class="note">ประชากรจาก GHSL ปี ${d.pop_epoch} เป็นค่าประมาณ · เป็นการสัมผัสความร้อน ไม่ใช่จำนวนผู้ป่วย</p></section>`;
-  }
-
-  html += `<p class="note">อุณหภูมิจากดาวเทียม ${srcLabel(d.source)} เฉพาะวันที่ท้องฟ้าโปร่ง · พื้นที่ที่เลือกราว ${nf(d.area_km2)} ตร.กม.</p>`;
+  html += `<div id="ovNotes"><p class="note">อุณหภูมิจากดาวเทียม ${esc(srcLabel(d.source))} เฉพาะวันฟ้าโปร่ง · พื้นที่ที่เลือกราว ${isNum(d.area_km2) ? nf(d.area_km2) : '–'} ตร.กม.</p></div>
+    <div class="actions"><button class="mini" data-act="csv" data-what="overview">${CSV_SVG}ดาวน์โหลด CSV</button></div>`;
   return html;
 }
 
+function sensTable(d) {
+  const S = Array.isArray(d.sensitivity) ? d.sensitivity : [];
+  if (!S.length) return '';
+  const T = cfg.sens_temps, G = cfg.sens_greens;
+  const near = (a, b) => Math.abs(a - b) < 1e-6;
+  const find = (t, g) => S.find(r => near(r.t, t) && near(r.g, g));
+  const body = T.map(t => `<tr><th scope="row">${t} °C</th>${G.map(g => {
+    const r = find(t, g);
+    const def = near(t, cfg.very_hot) && near(g, cfg.green_low);
+    const ppl = r && isNum(r.people) ? nfP(r.people) : '';
+    return `<td class="${def ? 'def' : ''}" title="${esc(ppl ? 'คนราว ' + ppl : '')}">${r && isNum(r.area_km2) ? km2(r.area_km2) : '–'}<small>${ppl}</small></td>`;
+  }).join('')}</tr>`).join('');
+  return `<section><h3>ความไวของผลต่อเกณฑ์</h3>
+    <p class="note" style="margin:0">ย่านเร่งด่วนกว้างเท่าไร (ตร.กม. และจำนวนคน) ถ้าเปลี่ยนเกณฑ์ความร้อนหรือพื้นที่สีเขียว · กรอบแดงคือเกณฑ์ที่ใช้บนแผนที่</p>
+    <table class="sens"><thead><tr><th scope="col">ผิวร้อนเกิน</th>${G.map(g => `<th scope="col">สีเขียวน้อยกว่า ${Math.round(g * 100)}%</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></section>`;
+}
+
+function coverSection(d) {
+  const lived = d.cover_lived || {}, all = d.cover_all || {};
+  const useLived = COVER.some(([k]) => isNum(lived[k]));
+  const c = useLived ? lived : all;
+  if (!COVER.some(([k]) => isNum(c[k]))) return '';
+  const scope = useLived ? 'ในย่านที่มีคนอยู่' : 'ในพื้นที่ที่เลือก';
+  const raw = k => (isNum(c[k]) ? Math.max(0, c[k]) : 0);
+  const tot = COVER.reduce((a, [k]) => a + raw(k), 0);
+  const v = k => raw(k) / Math.max(1, tot);
+  const other = Math.max(0, 1 - tot);
+  const segs = COVER.map(([k, n, col]) => `<span style="width:${(v(k) * 100).toFixed(2)}%;background:${col}" title="${n} ${Math.round(v(k) * 100)}%"></span>`).join('') +
+    (other > 0.005 ? `<span style="width:${(other * 100).toFixed(2)}%;background:#ddd6cb" title="อื่น ๆ ${Math.round(other * 100)}%"></span>` : '');
+  const keys = COVER.map(([k, n, col]) => `<span><i style="background:${col}"></i>${n} ${Math.round(v(k) * 100)}%</span>`).join('');
+  const tree = v('TREES') * 100;
+  return `<section><h3>พื้นผิว${scope}</h3><div class="stack">${segs}</div><div class="keys">${keys}</div>
+    <div class="meter" aria-hidden="true"><div class="fill" style="width:${Math.min(100, tree).toFixed(1)}%"></div><div class="target" style="left:30%"><span>30%</span></div></div>
+    <p class="lead" style="font-size:13.5px;margin-top:4px">ร่มไม้ (ต้นไม้) ${scope} <b>${Math.round(tree)}%</b> — หลัก 3-30-300 แนะนำอย่างน้อย 30%</p>
+    <p class="note" style="margin-top:2px">นับจากประเภทพื้นผิวที่พบบ่อยที่สุดของปีในแต่ละจุด 10 ม. · Dynamic World ปี ${esc(d.dw_year)}</p></section>`;
+}
+
+const NODATA_COLOR = '#d9d4cc';
+function peopleSection(d) {
+  const { ex, classified, hot, total, noData, pct, noDataPct, showNoData } = hotPeople(d);
+  if (classified < 1) return '';
+  const pal = cfg.lst_palette;
+  const w = n => (n / total * 100).toFixed(2);
+  const segs = ex.map(r => `<span style="width:${w(r.people || 0)}%;background:${pal[r.level]}" title="${LEVEL_NAMES[r.level]}: ${nfP(r.people)}"></span>`).join('') +
+    (showNoData ? `<span style="width:${w(noData)}%;background:${NODATA_COLOR}" title="ไม่มีข้อมูลอุณหภูมิ: ${nfP(noData)}"></span>` : '');
+  const keys = ex.filter(r => r.people >= 1).map(r => `<span><i style="background:${pal[r.level]}"></i>${LEVEL_NAMES[r.level]} ${pctText(pctOf(r.people, total))}%</span>`).join('') +
+    (showNoData ? `<span><i style="background:${NODATA_COLOR}"></i>ไม่มีข้อมูลอุณหภูมิ ${pctText(noDataPct)}%</span>` : '');
+  return `<section><h3>ผู้คนกับความร้อน</h3>
+    <p class="lead">ผู้อยู่อาศัยราว ${nfP(total)} ในจำนวนนี้ <b>${nfP(hot)} (${pctText(pct)}%)</b> อยู่ในย่านที่${LEVEL_NAMES[cfg.hot_level]}ขึ้นไป (ผิวเกิน ${cfg.very_hot} °C ช่วงบ่าย)${showNoData ? ` · อีก ${pctText(noDataPct)}% อยู่ในช่องที่ไม่มีข้อมูลอุณหภูมิ (เช่น เมฆบัง)` : ''}</p>
+    <div class="stack">${segs}</div><div class="keys">${keys}</div>
+    <p class="note">ประชากรจาก GHSL เป็นการประมาณผู้อยู่อาศัยจริง (รวมผู้ไม่ได้ย้ายทะเบียนบ้าน) จึงมากกว่าตัวเลขทะเบียนราษฎร์ · ปี ${esc(d.pop_epoch)} · เป็นการสัมผัสความร้อน ไม่ใช่จำนวนผู้ป่วย</p></section>`;
+}
+
+// ---------- แผนภูมิแท่งเทียบกลุ่ม (ใช้ร่วมหลายแท็บ) ----------
+function chartActions(keys, csvWhat, names) {
+  return '<div class="actions">' + keys.map((k, i) => `<button class="mini" data-act="png" data-chart="${k}">${PNG_SVG}บันทึกรูป${names ? names[i] : ''}</button>`).join('') +
+    (csvWhat ? `<button class="mini" data-act="csv" data-what="${csvWhat}">${CSV_SVG}ดาวน์โหลด CSV</button>` : '') + '</div>';
+}
+function valueRange(vals, step = 0.5) {
+  const lo = Math.min(0, ...vals), hi = Math.max(0, ...vals);
+  return { min: lo < 0 ? Math.floor((lo - 0.05) / step) * step : 0, max: hi > 0 ? Math.ceil((hi + 0.05) / step) * step : 0 };
+}
+
 // ---------- แท็บ: ปีที่เลือก ----------
-function drawChart(name, canvasId, config) {
-  if (charts[name]) charts[name].destroy();
-  charts[name] = new Chart($(canvasId), config);
-}
-
-function barOptions(yTitle, xTitle, yMin, tipExtra) {
-  return {
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      tooltip: { callbacks: { afterLabel: tipExtra } }
-    },
-    scales: {
-      y: { min: yMin, title: { display: true, text: yTitle }, grid: { color: '#efe9e0' } },
-      x: { title: { display: !!xTitle, text: xTitle }, grid: { display: false } }
-    }
-  };
-}
-
 async function loadYear() {
-  const my = seq;
-  $('yearChartWrap').hidden = true;
-  $('yearNote').hidden = true;
+  const ctx = newCtx('area');
+  killChart('year');
   const stop = loading($('yearOut'), 'กำลังเทียบอุณหภูมิในแต่ละกลุ่ม');
   try {
-    const d = await getData('bins', '/api/bins', { ...state.focus.payload, year: state.year, season: state.season });
-    if (my !== seq || state.tab !== 'year' || !sameYS(d)) return;
+    const d = await getData('bins', '/api/bins', { ...state.focus.payload, year: ctx.snap.year, season: ctx.snap.season }, ctx);
+    if (!ctx.live() || !matches(d, ctx)) return;
+    last.bins = d;
     renderYear(d);
   } catch (err) {
-    if (my === seq && state.tab === 'year') $('yearOut').innerHTML = `<div class="empty">${errMsg(err)}</div>`;
+    if (!isAbort(err) && ctx.live()) showError($('yearOut'), err, 'area');
   } finally { stop(); }
 }
 
 function renderYear(d) {
-  const view = state.yearView;
-  const rows = d[view];
-  const total = rows.reduce((a, r) => a + r.count, 0);
-  const valid = rows.map(r => r.count >= 3 && r.mean != null);
-  if (total < 8 || valid.filter(Boolean).length < 2) {
-    $('yearOut').innerHTML = `<div class="empty">ย่านที่มีคนอยู่ในพื้นที่นี้มีน้อยเกินไปสำหรับเปรียบเทียบ (ข้อมูลอุณหภูมิละเอียด 1 กม.)<br>ลองเลือกจังหวัด หรือวาดพื้นที่ให้กว้างขึ้น${state.season === 'wet' ? '<br>หน้าฝนมีเมฆมาก ลองเลือกทั้งปีหรือหน้าแล้ง' : ''}</div>`;
+  const view = state.yearView, el = $('yearOut');
+  const what = view === 'green' ? 'พื้นที่สีเขียว' : 'สิ่งปลูกสร้าง';
+  const rows = (Array.isArray(d[view]) ? d[view] : []).map((r, i) => ({ ...r, i }));
+  const shown = rows.filter(r => isNum(r.mean) && r.count >= N_SHOW);
+  const good = shown.filter(r => r.count >= N_SENT);
+  killChart('year');
+  const table = (ref) => `<table class="tbl"><thead><tr><th scope="col">กลุ่ม (${what})</th><th scope="col">อุณหภูมิเฉลี่ย °C</th><th scope="col">ช่อง (n)</th></tr></thead><tbody>${
+    rows.map(r => {
+      const ok = isNum(r.mean) && r.count >= N_SHOW;
+      return `<tr class="${ref && r.i === ref.i ? 'ref' : ok ? '' : 'dim'}"><td>${esc(r.label)}${ref && r.i === ref.i ? ' <span class="muted">(อ้างอิง)</span>' : ''}</td><td>${ok ? num(r.mean) : '–'}</td><td>${nf(r.count || 0)}</td></tr>`;
+    }).join('')}</tbody></table>`;
+  if (good.length < 2) {
+    el.innerHTML = fastNote(d) + `<div class="empty">ย่านที่มีคนอยู่ในพื้นที่นี้มีน้อยเกินไปสำหรับเปรียบเทียบอย่างน่าเชื่อถือ<br>(ต้องมีอย่างน้อย 2 กลุ่มที่มี ${N_SENT} ช่องขึ้นไป)<br>ลองเลือกจังหวัด หรือวาดพื้นที่ให้กว้างขึ้น${state.season === 'wet' ? '<br>หน้าฝนมีเมฆมาก ลองเลือกทั้งปีหรือฤดูอื่น' : ''}</div>` + table(null);
     return;
   }
-  const data = rows.map((r, i) => (valid[i] ? r.mean : null));
-  const vals = data.filter(v => v != null);
-  const idx = valid.map((v, i) => (v ? i : -1)).filter(i => i >= 0);
-  const lo = rows[idx[0]], hi = rows[idx[idx.length - 1]];
-  const diff = hi.mean - lo.mean;
-  const what = view === 'green' ? 'พื้นที่สีเขียว' : 'สิ่งปลูกสร้างและถนน';
-  const word = diff >= 0 ? 'ร้อนกว่า' : 'เย็นกว่า';
-  $('yearOut').innerHTML = `<p class="lead" style="margin-top:12px">ในปี ${d.year} (${seasonShort()}) ย่านที่มี${what} <b>${hi.label}</b> ${word}ย่านที่มี${what} <b>${lo.label}</b> อยู่ <b>${f1(Math.abs(diff))} °C</b> (${f1(hi.mean)} เทียบกับ ${f1(lo.mean)} °C)</p>`;
-
-  $('yearChartWrap').hidden = false;
+  // กลุ่มอ้างอิง: สิ่งปลูกสร้างน้อยที่สุด / พื้นที่สีเขียวมากที่สุด ที่มีอย่างน้อย 20 ช่อง
+  const ref = view === 'built' ? good[0] : good[good.length - 1];
+  const far = view === 'built' ? good[good.length - 1] : good[0];
+  const diff = far.mean - ref.mean;
+  const sep = !overlaps(ciOf(far), ciOf(ref));
+  const lead = `ปี ${d.year} (${esc(seasonShort())}) ย่านที่มี${what} <b>${esc(far.label)}</b> ${diff >= 0 ? 'ร้อนกว่า' : 'เย็นกว่า'}ย่านที่มี${what} <b>${esc(ref.label)}</b> อยู่ <b>${num(Math.abs(diff))} °C</b> (${num(far.mean)} เทียบกับ ${num(ref.mean)} °C) · ` +
+    (sep ? '<b>ต่างกันชัดเจน</b> (ช่วงความเชื่อมั่นไม่ซ้อนกัน)' : '<b>ยังแยกไม่ชัด</b> (ช่วงความเชื่อมั่นซ้อนกัน)');
+  const data = shown.map(r => r.mean - ref.mean);
+  const whiskers = shown.map(r => { const c = ciOf(r); return c && { lo: c.lo - ref.mean, hi: c.hi - ref.mean }; });
+  const ext = whiskers.flatMap((w, i) => (w ? [w.lo, w.hi] : [data[i]]));
+  const rng = valueRange(ext);
+  el.innerHTML = fastNote(d) + `<p class="lead">${lead}</p>
+    <div class="chart-wrap"><canvas id="yearChart" role="img" aria-label="แผนภูมิแท่ง อุณหภูมิของแต่ละกลุ่มเทียบกับกลุ่มอ้างอิง"></canvas></div>
+    ${chartActions(['year'], 'year')}
+    ${table(ref)}
+    <p class="note">เฉพาะย่านที่มีคนอยู่ (${nf(cfg.pop_any)} คน/ตร.กม. ขึ้นไป) · อุณหภูมิ ${esc(srcLabel(d.source))} · พื้นผิว Dynamic World ${esc(d.dw_year)} · กลุ่มที่มีไม่ถึง ${N_SHOW} ช่องไม่แสดงในกราฟ ประโยคสรุปใช้เฉพาะกลุ่มที่มี ${N_SENT} ช่องขึ้นไป · เป็นความสัมพันธ์ ไม่ได้พิสูจน์สาเหตุ</p>
+    <p class="note">เส้นขีดคือช่วงความเชื่อมั่น 95% ของค่าเฉลี่ยแต่ละกลุ่ม · ${CI_NOTE}</p>`;
+  const narrow = $('yearOut').clientWidth < 460;
+  const tick = r => [...(narrow ? String(r.label).split(' ') : [r.label]), 'n=' + nf(r.count), ...(r.i === ref.i ? ['(อ้างอิง)'] : [])];
   drawChart('year', 'yearChart', {
     type: 'bar',
     data: {
-      labels: rows.map(r => r.label),
+      labels: shown.map(tick),
       datasets: [{
-        label: 'อุณหภูมิพื้นผิวช่วงบ่ายเฉลี่ย (°C)', data,
-        backgroundColor: data.map(v => (v == null ? '#d9d4cc' : cfg.lst_palette[levelOf(v)])),
-        borderColor: 'rgba(29,35,39,.35)', borderWidth: 1, borderRadius: 8, borderSkipped: false, maxBarThickness: 56
+        label: 'ร้อนกว่ากลุ่มอ้างอิง (°C)', data, whiskers,
+        backgroundColor: shown.map((r, i) => (r.i === ref.i ? '#c9cdd0' : data[i] >= 0 ? '#ec9a7e' : '#8fbcd9')),
+        borderColor: 'rgba(29,35,39,.45)', borderWidth: 1, borderRadius: 6, borderSkipped: false, maxBarThickness: 54
       }]
     },
-    options: barOptions('อุณหภูมิ (°C)', `สัดส่วน${what}ในช่อง 1 กม.`,
-      Math.floor(Math.min(...vals) - 1),
-      ctx => `${rows[ctx.dataIndex].count} ช่อง (ราว ${rows[ctx.dataIndex].count} ตร.กม.)`)
-  });
-  $('yearNote').hidden = false;
-  $('yearNote').textContent = `เฉพาะย่านที่มีคนอยู่ (${nf(cfg.pop_any)} คน/ตร.กม. ขึ้นไป) · อุณหภูมิ ${srcLabel(d.source)} · พื้นผิว Dynamic World ${d.dw_year} · เป็นความสัมพันธ์ ไม่ได้พิสูจน์สาเหตุ · กลุ่มที่มีไม่ถึง 3 ช่องไม่แสดง`;
+    options: {
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        refMark: { index: shown.findIndex(r => r.i === ref.i) },
+        tooltip: { callbacks: {
+          label: ctx => (shown[ctx.dataIndex].i === ref.i ? 'กลุ่มอ้างอิง (= 0)' : `${sgn(data[ctx.dataIndex])} °C เทียบกลุ่มอ้างอิง`),
+          afterLabel: ctx => { const r = shown[ctx.dataIndex], w = whiskers[ctx.dataIndex]; return `เฉลี่ย ${num(r.mean)} °C · ${nf(r.count)} ช่อง` + (w ? `\nช่วงความเชื่อมั่น 95%: ${sgn(w.lo)} ถึง ${sgn(w.hi)} °C` : ''); }
+        } }
+      },
+      scales: {
+        y: { beginAtZero: true, min: rng.min, max: rng.max, title: { display: true, text: 'ร้อนกว่ากลุ่มอ้างอิง (°C)' }, grid: { color: c => (c.tick.value === 0 ? '#8d969b' : '#efe9e0') } },
+        x: { title: { display: true, text: `สัดส่วน${what}ในช่อง 1 กม.` }, grid: { display: false }, ticks: { maxRotation: 0, autoSkip: false, font: { size: 11 } } }
+      }
+    }
+  }, { title: `อุณหภูมิพื้นผิวเทียบกลุ่มอ้างอิง แยกตาม${what}`, sub: `${regionName()} · ปี ${d.year} · ${seasonFull()} · เส้นขีด = ช่วงความเชื่อมั่น 95%`, file: `year_${view}` });
 }
 
 // ---------- แท็บ: ย้อนหลัง 20 ปี ----------
 async function loadHistory() {
-  const my = seq, view = state.histView;
-  $('histChartWrap').hidden = true;
-  $('histNote').hidden = true;
+  const ctx = newCtx('area'), view = ctx.snap.histView;
+  ['history', 'hist2'].forEach(killChart);
   const stop = loading($('histOut'), 'กำลังดึงข้อมูลย้อนหลัง 20 ปี');
   try {
-    const d = await getData(view, '/api/' + view, { ...state.focus.payload, season: state.season });
-    if (my !== seq || state.tab !== 'history' || state.histView !== view || d.season !== state.season) return;
-    if (view === 'trend') { renderTrend(d); appendValidation($('histOut'), my, 'history'); } else renderChange(d);
+    const d = await getData(view, '/api/' + view, { ...state.focus.payload, season: ctx.snap.season }, ctx);
+    if (!ctx.live() || d.season !== ctx.snap.season) return;
+    last[view] = d;
+    if (view === 'trend') { renderTrend(d); appendValidation($('histNotes'), ctx); } else renderChange(d);
   } catch (err) {
-    if (my === seq && state.tab === 'history') $('histOut').innerHTML = `<div class="empty">${errMsg(err)}</div>`;
+    if (!isAbort(err) && ctx.live()) showError($('histOut'), err, 'area');
   } finally { stop(); }
 }
 
+function yearAxis() {
+  const ys = [];
+  for (let y = cfg.first_year; y <= cfg.last_year; y++) ys.push(y);
+  return ys;
+}
+const isViirsYear = y => y > cfg.aqua_last_year;
+
 function renderTrend(d) {
-  const rows = d.rows;
-  if (rows.every(r => r.lst == null)) {
-    $('histOut').innerHTML = '<div class="empty">ไม่มีข้อมูลอุณหภูมิในย่านที่มีคนอยู่ของพื้นที่นี้ ลองเลือกพื้นที่ที่กว้างขึ้น</div>';
+  const el = $('histOut');
+  const rows = (Array.isArray(d.rows) ? d.rows : []).filter(r => r && isNum(r.year));
+  ['history', 'hist2'].forEach(killChart);
+  if (!rows.some(r => isNum(r.lst))) {
+    el.innerHTML = fastNote(d) + '<div class="empty">ไม่มีข้อมูลอุณหภูมิในย่านที่มีคนอยู่ของพื้นที่นี้ ลองเลือกพื้นที่ที่กว้างขึ้น</div>';
     return;
   }
-  const a = rows[0], b = rows[rows.length - 1];
-  let lead = 'ข้อมูลบางช่วงไม่พอ จึงสรุปการเปลี่ยนแปลงไม่ได้';
-  if ([a.lst, b.lst, a.built, b.built].every(v => v != null)) {
-    const dB = b.built - a.built, dL = b.lst - a.lst;
-    lead = `จากช่วง ${a.label} ถึง ${b.label} อาคารในย่านที่มีคนอยู่${dB >= 0 ? 'เพิ่มขึ้น' : 'ลดลง'} <b>${f1(Math.abs(dB))} จุด</b> (${f1(a.built)}% → ${f1(b.built)}%) ` +
-      `ขณะที่อุณหภูมิพื้นผิวช่วงบ่าย${dL >= 0 ? 'สูงขึ้น' : 'ต่ำลง'} <b>${f1(Math.abs(dL))} °C</b> (${f1(a.lst)} → ${f1(b.lst)} °C)`;
+  const years = yearAxis();
+  rows.forEach(r => { if (!years.includes(r.year)) years.push(r.year); });
+  years.sort((a, b) => a - b);
+  const byYear = Object.fromEntries(rows.map(r => [r.year, r]));
+  const viirs = y => (byYear[y] ? byYear[y].source === 'VIIRS' : isViirsYear(y));
+  const aqua = rows.filter(r => isNum(r.lst) && r.source !== 'VIIRS' && r.year <= cfg.aqua_last_year);
+  const fit = ols(aqua.map(r => [r.year, r.lst]));
+  const built = (Array.isArray(d.built) ? d.built : []).filter(b => b && isNum(b.built));
+  let lead = 'ข้อมูลรายปีไม่พอสำหรับคำนวณแนวโน้ม';
+  if (fit) {
+    const t = trendText(fit);
+    lead = `ปี ${fit.x0}–${fit.x1} อุณหภูมิพื้นผิวช่วงบ่ายในย่านที่มีคนอยู่มีแนวโน้ม <b>${t.slope} °C ต่อ 10 ปี</b> (ช่วงความเชื่อมั่น 95%: ${t.lo} ถึง ${t.hi}) · <b>${t.verdict}</b>`;
   }
-  $('histOut').innerHTML = `<p class="lead" style="margin-top:12px">${lead}</p>`;
-  $('histChartWrap').hidden = false;
+  if (built.length >= 2) {
+    const a = built[0], b = built[built.length - 1];
+    lead += ` ส่วนสัดส่วนอาคาร${b.built >= a.built ? 'เพิ่ม' : 'ลด'}จาก ${num(a.built)}% (${a.epoch}) เป็น ${num(b.built)}% (${b.epoch})`;
+  }
+  const sw = years.findIndex(y => viirs(y));
+  el.innerHTML = fastNote(d) + `<p class="lead">${lead}</p>
+    <div class="chart-wrap"><canvas id="histChart" role="img" aria-label="กราฟเส้น อุณหภูมิพื้นผิวช่วงบ่ายรายปี"></canvas></div>
+    <h4 class="sub-h">สัดส่วนอาคารในย่านเดียวกัน (GHSL)</h4>
+    <div class="chart-wrap sm"><canvas id="histChart2" role="img" aria-label="แผนภูมิแท่ง สัดส่วนอาคาร ปี 2005 ถึง 2020"></canvas></div>
+    ${chartActions(['history', 'hist2'], 'trend', ['กราฟอุณหภูมิ', 'กราฟอาคาร'])}
+    <div id="histNotes"><p class="note">${esc(seasonFull())} · อุณหภูมิเฉพาะวันฟ้าโปร่ง · จุดทึบ = Aqua ปี ${cfg.first_year}–${cfg.aqua_last_year} ใช้คิดแนวโน้ม · จุดโปร่งเส้นประ = VIIRS ที่ปรับเทียบแล้ว (ไม่นำมาคิดแนวโน้ม) · อาคารจาก GHSL (ไม่รวมถนน) · แต่ละปีอากาศต่างกัน ดูมุมมอง “แยกตามระดับที่อาคารเพิ่ม” เพื่อเทียบกับพื้นที่ที่ไม่เปลี่ยน</p></div>`;
+  const red = '#d1352b';
   drawChart('history', 'histChart', {
     type: 'line',
     data: {
-      labels: rows.map(r => r.label),
+      labels: years,
       datasets: [
-        { label: 'อุณหภูมิพื้นผิวช่วงบ่าย (°C)', data: rows.map(r => r.lst), borderColor: '#d1352b', backgroundColor: '#d1352b', borderWidth: 3, pointRadius: 5, tension: .25, yAxisID: 'y' },
-        { label: 'สัดส่วนอาคาร (%)', data: rows.map(r => r.built), borderColor: '#7a6fb0', backgroundColor: '#7a6fb0', borderWidth: 3, pointRadius: 5, tension: .25, borderDash: [6, 4], yAxisID: 'y1' }
+        {
+          label: 'อุณหภูมิพื้นผิวช่วงบ่ายเฉลี่ย (°C)', data: years.map(y => (byYear[y] && isNum(byYear[y].lst) ? byYear[y].lst : null)),
+          borderColor: red, backgroundColor: red, borderWidth: 2, tension: 0,
+          pointRadius: 3.5, pointHoverRadius: 5, pointBorderWidth: 1.5, pointBorderColor: red,
+          pointBackgroundColor: years.map(y => (viirs(y) ? '#fff' : red)),
+          segment: { borderDash: c => (viirs(years[c.p1DataIndex]) ? [5, 4] : undefined) }
+        },
+        ...(fit ? [{
+          label: `แนวโน้ม ${fit.x0}–${fit.x1}`, data: years.map(y => (y >= fit.x0 && y <= fit.x1 ? fit.a + fit.b * y : null)),
+          borderColor: '#1d2327', borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 0, tension: 0
+        }] : [])
       ]
     },
     options: {
       maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { position: 'bottom', labels: { boxWidth: 14, usePointStyle: true } } },
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 14, boxHeight: 2, font: { size: 11.5 } } },
+        sensorSwitch: { index: sw > 0 ? sw : null },
+        tooltip: { callbacks: { label: c => (c.parsed.y == null ? null : `${c.dataset.label}: ${num(c.parsed.y, 2)}`), afterBody: items => { const r = byYear[years[items[0].dataIndex]]; return r ? `${srcLabel(r.source)}${isNum(r.count) ? ' · ' + nf(r.count) + ' ช่อง' : ''}` : ''; } } }
+      },
       scales: {
-        y: { title: { display: true, text: 'อุณหภูมิ (°C)' }, grid: { color: '#efe9e0' } },
-        y1: { position: 'right', min: 0, title: { display: true, text: 'อาคาร (%)' }, grid: { drawOnChartArea: false } },
-        x: { title: { display: true, text: 'ช่วงปี (เฉลี่ย 5 ปี)' }, grid: { display: false } }
+        y: { grace: '8%', title: { display: true, text: 'อุณหภูมิ (°C)' }, grid: { color: '#efe9e0' } },
+        x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkipPadding: 8, font: { size: 11 } } }
       }
     }
-  });
-  $('histNote').hidden = false;
-  $('histNote').textContent = `${cfg.seasons[state.season]} · อุณหภูมิ Aqua เฉพาะวันที่ท้องฟ้าโปร่ง · อาคารจาก GHSL (ไม่รวมถนน เพราะ Dynamic World ย้อนไปไม่ถึงปี 2005) · แต่ละปีอากาศร้อนเย็นต่างกัน ดูมุมมอง "แยกตามระดับที่สิ่งปลูกสร้างเพิ่ม" เพื่อเทียบกับพื้นที่ที่ไม่เปลี่ยน`;
+  }, { title: 'อุณหภูมิพื้นผิวช่วงบ่ายรายปี ในย่านที่มีคนอยู่', sub: `${regionName()} · ${seasonFull()} · จุดโปร่ง = VIIRS`, file: 'trend' });
+  if (built.length) {
+    drawChart('hist2', 'histChart2', {
+      type: 'bar',
+      data: { labels: built.map(b => String(b.epoch)), datasets: [{ label: 'สัดส่วนอาคาร (%)', data: built.map(b => b.built), backgroundColor: '#9d94c8', borderColor: '#5d528f', borderWidth: 1, borderRadius: 5, maxBarThickness: 46 }] },
+      options: {
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `อาคาร ${num(c.parsed.y)}%` } } },
+        scales: { y: { beginAtZero: true, title: { display: true, text: 'อาคาร (%)' }, grid: { color: '#efe9e0' } }, x: { grid: { display: false } } }
+      }
+    }, { title: 'สัดส่วนอาคารในย่านที่มีคนอยู่ (GHSL)', sub: `${regionName()} · ปี 2005–2020`, file: 'built' });
+  }
 }
 
-function renderChange(d) {
-  const rows = d.rows;
-  const ok = rows.map(r => r.count >= 3 && r.mean != null);
-  if (!ok.some(Boolean)) {
-    $('histOut').innerHTML = '<div class="empty">ข้อมูลไม่พอสำหรับเทียบ (พื้นที่เล็กเกินไป หรือมีเมฆบังหลายปี)<br>ลองเลือกจังหวัด หรือวาดพื้นที่ให้กว้างขึ้น</div>';
-    return;
-  }
-  let lead;
-  if (ok[0] && ok[3]) {
-    const ctrl = rows[0], big = rows[3], diff = big.mean - ctrl.mean;
-    lead = `ช่วง 2003–07 ถึง 2018–22 ย่านที่อาคารเพิ่มมาก${big.mean >= 0 ? 'ร้อนขึ้น' : 'เย็นลง'} <b>${f1(Math.abs(big.mean))} °C</b> ` +
-      `ขณะที่พื้นที่ที่ไม่มีอาคารและไม่เปลี่ยน${ctrl.mean >= 0 ? 'ร้อนขึ้น' : 'เย็นลง'} ${f1(Math.abs(ctrl.mean))} °C ` +
-      `ส่วนต่าง <b>${diff >= 0 ? '+' : '−'}${f1(Math.abs(diff))} °C</b>`;
-  } else {
-    lead = 'กลุ่มเทียบหรือกลุ่ม "เพิ่มมาก" มีข้อมูลไม่พอในพื้นที่นี้ ดูแท่งที่มีข้อมูลประกอบ';
-  }
-  $('histOut').innerHTML = `<p class="lead" style="margin-top:12px">${lead}</p>`;
-  $('histChartWrap').hidden = false;
-  drawChart('history', 'histChart', {
+// แผนภูมิแท่งแนวนอน: อุณหภูมิที่เปลี่ยนไป แยกตามระดับที่อาคารเพิ่ม (ใช้ทั้งแท็บย้อนหลังและหน้าเทียบ 2 เมือง)
+function changeRows(d) {
+  return (Array.isArray(d.rows) ? d.rows : []).map((r, i) => ({ ...r, i })).filter(r => isNum(r.mean) && r.count >= N_SHOW);
+}
+function changeExtent(d) {
+  return changeRows(d).flatMap(r => { const c = ciOf(r); return c ? [c.lo, c.hi] : [r.mean]; });
+}
+function changeChartConfig(d, rng) {
+  const shown = changeRows(d);
+  const whiskers = shown.map(r => ciOf(r));
+  return {
     type: 'bar',
     data: {
-      labels: rows.map((r, i) => CHANGE_SHORT[i] || r.label),
+      labels: shown.map(r => [CHANGE_SHORT[r.i] || r.label, 'n=' + nf(r.count)]),
       datasets: [{
-        label: 'อุณหภูมิที่เปลี่ยนไป (°C)',
-        data: rows.map((r, i) => (ok[i] ? r.mean : null)),
-        backgroundColor: CHANGE_COLORS, borderColor: 'rgba(29,35,39,.35)', borderWidth: 1,
-        borderRadius: 8, borderSkipped: false, maxBarThickness: 56
+        label: 'อุณหภูมิที่เปลี่ยนไป (°C)', data: shown.map(r => r.mean), whiskers,
+        backgroundColor: shown.map(r => CHANGE_COLORS[r.i] || '#bbb'), borderColor: 'rgba(29,35,39,.45)', borderWidth: 1,
+        borderRadius: 5, borderSkipped: false, maxBarThickness: 26
       }]
     },
-    options: (() => {
-      const o = barOptions('เปลี่ยนไป (°C)', '', undefined,
-        ctx => `${rows[ctx.dataIndex].count} ช่อง (ราว ${rows[ctx.dataIndex].count} ตร.กม.)`);
-      o.scales.y.beginAtZero = true;
-      delete o.scales.y.min;
-      o.scales.x.ticks = { maxRotation: 0, autoSkip: false, font: { size: 11 } };
-      o.plugins.tooltip.callbacks.title = items => rows[items[0].dataIndex].label;
-      return o;
-    })()
+    options: {
+      indexAxis: 'y',
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: {
+          title: items => (d.rows[shown[items[0].dataIndex].i] || {}).label || '',
+          label: c => `เปลี่ยนไป ${sgn(c.parsed.x, 2)} °C`,
+          afterLabel: c => { const w = whiskers[c.dataIndex]; return `${nf(shown[c.dataIndex].count)} ช่อง` + (w ? ` · ช่วง 95%: ${sgn(w.lo, 2)} ถึง ${sgn(w.hi, 2)}` : ''); }
+        } }
+      },
+      scales: {
+        x: { beginAtZero: true, min: rng.min, max: rng.max, title: { display: true, text: 'อุณหภูมิที่เปลี่ยนไป (°C)' }, grid: { color: c => (c.tick.value === 0 ? '#8d969b' : '#efe9e0') } },
+        y: { grid: { display: false }, ticks: { font: { size: 11 } } }
+      }
+    }
+  };
+}
+function changeSentence(d) {
+  const rows = Array.isArray(d.rows) ? d.rows : [];
+  const c = rows[0], b = rows[3];
+  if (!c || !b || !isNum(c.mean) || !isNum(b.mean) || c.count < N_SENT || b.count < N_SENT) {
+    return `กลุ่มเทียบหรือกลุ่ม “อาคารเพิ่มมาก” มีไม่ถึง ${N_SENT} ช่อง จึงยังไม่สรุปผล`;
+  }
+  const diff = b.mean - c.mean;
+  const sep = !overlaps(ciOf(b), ciOf(c));
+  return `ย่านที่อาคารเพิ่มมาก${b.mean >= 0 ? 'ร้อนขึ้น' : 'เย็นลง'} <b>${num(Math.abs(b.mean))} °C</b> ส่วนกลุ่มเทียบ${c.mean >= 0 ? 'ร้อนขึ้น' : 'เย็นลง'} ${num(Math.abs(c.mean))} °C ` +
+    `ส่วนต่าง <b>${sgn(diff)} °C</b> · ${sep ? '<b>ต่างกันชัดเจน</b>' : '<b>ยังแยกไม่ชัด</b> (ช่วงความเชื่อมั่นซ้อนกัน)'}`;
+}
+const CONTROL_NOTE = 'กลุ่มเทียบ = ไม่มีอาคาร ไม่เปลี่ยน และอยู่ห่างย่านที่สร้างใหม่ ≥ 2 กม.';
+
+function renderChange(d) {
+  const el = $('histOut');
+  ['history', 'hist2'].forEach(killChart);
+  if (!changeRows(d).length) {
+    el.innerHTML = fastNote(d) + '<div class="empty">ข้อมูลไม่พอสำหรับเทียบ (พื้นที่เล็กเกินไป หรือมีเมฆบังหลายปี)<br>ลองเลือกจังหวัด หรือวาดพื้นที่ให้กว้างขึ้น</div>';
+    return;
+  }
+  const n = changeRows(d).length;
+  el.innerHTML = fastNote(d) + `<p class="lead">ช่วง 2003–07 ถึง 2018–22 ${changeSentence(d)}</p>
+    <div class="chart-wrap" style="height:${70 + n * 40}px"><canvas id="histChart" role="img" aria-label="แผนภูมิแท่ง อุณหภูมิที่เปลี่ยนไปแยกตามระดับที่อาคารเพิ่ม"></canvas></div>
+    ${chartActions(['history'], 'change')}
+    <p class="note">${esc(seasonFull())} · เทียบค่าเฉลี่ยปี 2018–22 กับ 2003–07 (Aqua) · กลุ่มแบ่งตามอาคารที่เพิ่มขึ้น (จุดเปอร์เซ็นต์ของพื้นที่ช่อง) จาก GHSL ปี 2005 กับ 2020 · ${CONTROL_NOTE} ใช้หักผลของสภาพอากาศทั่วไป · การสร้างอาคารมักมาพร้อมการสูญเสียต้นไม้ จึงแยกสองสาเหตุนี้ออกจากกันไม่ได้</p>
+    <p class="note">เส้นขีดคือช่วงความเชื่อมั่น 95% · ${CI_NOTE}</p>`;
+  drawChart('history', 'histChart', changeChartConfig(d, valueRange(changeExtent(d))),
+    { title: 'อุณหภูมิพื้นผิวที่เปลี่ยนไป แยกตามระดับที่อาคารเพิ่ม', sub: `${regionName()} · 2003–07 → 2018–22 · ${seasonFull()} · เส้นขีด = ช่วงความเชื่อมั่น 95%`, file: 'change' });
+}
+
+// =============================================================== ผลการศึกษา: เทียบ 2 เมือง
+let cmp = { suhi: {}, change: {}, summary: {} };
+let cmpSeq = 0;
+let suhiTimer = null;
+const cmpOpen = () => state.panel && state.view === 'compare';
+function stopCompareTimer() { if (suhiTimer) { clearTimeout(suhiTimer); suhiTimer = null; } }
+// ออกจากหน้าเทียบ 2 เมือง: หยุดลองใหม่อัตโนมัติ และไม่ต้องวาดผลที่ตามมาทีหลัง
+function leaveCompare() { stopCompareTimer(); abortScope('cmp'); cmpSeq++; }
+
+function loadCompare() {
+  stopCompareTimer();
+  abortScope('area');
+  cmpSeq++;
+  const ctx = newCtx('cmp');
+  cmp = { suhi: {}, change: {}, summary: {} };
+  ['cmp', 'cmpChange0', 'cmpChange1'].forEach(killChart);
+  const s = cfg.suhi || DEFAULT_CFG.suhi, ring = s.ring_km || [2, 20];
+  $('view-compare').innerHTML = `
+    <p class="cmp-intro">เทียบ “เขตเมือง” กับ “ชนบทรอบ ๆ” ด้วยนิยามเดียวกันทั้งสองเมือง ไม่เทียบทั้งจังหวัด เพราะกรุงเทพฯ เป็นเมืองเกือบทั้งจังหวัด แต่ขอนแก่นส่วนใหญ่เป็นชนบท</p>
+    <div id="cmpWait"></div>
+    <section class="cmp-sec"><h3><span class="no">1</span>เมืองร้อนกว่าชนบทรอบ ๆ แค่ไหน</h3>
+      <p class="headline" id="cmpHeadline" hidden></p>
+      <div class="duo" id="cmpCards"></div>
+      <p class="note">เขตเมือง = เขตเมืองหลัก (urban centre) ของ GHSL · ชนบท = พื้นที่ชนบท ${ring[0]}–${ring[1]} กม. รอบเมือง ความสูงต่างกันไม่เกิน ${s.elev_tol_m} ม. ไม่รวมแหล่งน้ำ · อุณหภูมิพื้นผิวช่วงบ่าย ปี ${state.year} (${esc(seasonShort())})</p>
+    </section>
+    <section class="cmp-sec"><h3><span class="no">2</span>20 ปีที่ผ่านมา</h3><div id="cmpTrend"></div></section>
+    <section class="cmp-sec"><h3><span class="no">3</span>อาคารเพิ่ม → ร้อนขึ้น</h3>
+      <p class="note" style="margin:0 0 10px">อุณหภูมิที่เปลี่ยนไประหว่างปี 2003–07 กับ 2018–22 แยกตามว่าอาคารเพิ่มขึ้นมากแค่ไหน (2005→2020) · ${CONTROL_NOTE}</p>
+      <div class="duo wide" id="cmpChange"></div>
+      <p class="note">เส้นขีดคือช่วงความเชื่อมั่น 95% · ทั้งสองกราฟใช้สเกลเดียวกัน · ${CI_NOTE}</p>
+    </section>
+    <section class="cmp-sec"><h3><span class="no">4</span>คนที่ได้รับผล</h3><div class="duo" id="cmpPeople"></div>
+      <p class="note">ปี ${state.year} (${esc(seasonShort())}) · ประชากรจาก GHSL เป็นการประมาณผู้อยู่อาศัยจริง (รวมผู้ไม่ได้ย้ายทะเบียนบ้าน) จึงมากกว่าตัวเลขทะเบียนราษฎร์</p></section>
+    <section class="cmp-sec"><h3><span class="no">5</span>ควรปลูกต้นไม้ตรงไหน</h3><div class="duo" id="cmpPlant"></div></section>
+    <section class="cmp-sec"><h3>วิธีการและข้อจำกัด</h3>
+      <ul class="bullets">
+        <li>อุณหภูมิพื้นผิว (หลังคา ถนน ใบไม้) จากดาวเทียม ไม่ใช่อุณหภูมิอากาศ ช่องละราว 1 กม. ใช้เฉพาะช่องที่มีวันฟ้าโปร่งอย่างน้อย ${cfg.n_min} วันในฤดูของปีนั้น</li>
+        <li>ปี ${cfg.first_year}–${cfg.aqua_last_year} ใช้ MODIS Aqua ดวงเดียวกัน ปีหลังจากนั้นใช้ VIIRS ที่ปรับเทียบให้ใกล้ Aqua จึงคิดแนวโน้มเฉพาะช่วง Aqua</li>
+        <li>ตัวเลขเป็นความสัมพันธ์ ไม่ได้พิสูจน์สาเหตุ และ${CI_NOTE}</li>
+        <li>พื้นที่ปลูกต้นไม้เพิ่มได้เป็นจุดที่น่าตรวจสอบ ต้องดูเจ้าของที่ดินและแผนการใช้ที่ดินก่อนเสนอ</li>
+      </ul>
+      <div class="actions">
+        <button class="mini" data-act="csv" data-what="compare">${CSV_SVG}ดาวน์โหลดตัวเลข (CSV)</button>
+        <button class="mini" data-act="png" data-chart="cmp">${PNG_SVG}บันทึกรูปกราฟ</button>
+      </div>
+    </section>`;
+  cmpCities().forEach(c => ['suhi', 'change', 'summary'].forEach(kind => fetchCmp(kind, c, ctx)));
+}
+
+async function fetchCmp(kind, city, ctx) {
+  const { year, season } = ctx.snap;
+  const body = kind === 'summary' ? { province: city.en, year, season } : { province: city.en, season };
+  cmp[kind][city.en] = { st: 'load' };
+  renderCmp(kind);
+  try {
+    const d = await getData(kind, '/api/' + kind, body, ctx, cmpCache, kind === 'suhi' ? (r => r && r.ready !== false) : null);
+    if (!ctx.live()) return;
+    if (kind === 'suhi' && d.ready === false) {
+      cmp.suhi[city.en] = { st: 'wait', d };
+      scheduleSuhiRetry(ctx);
+    } else if (d.season !== undefined && d.season !== season) {
+      cmp[kind][city.en] = { st: 'err', err: new ApiError('ข้อมูลที่ได้ไม่ตรงกับฤดูที่เลือก ลองใหม่อีกครั้ง') };
+    } else {
+      cmp[kind][city.en] = { st: 'ok', d };
+    }
+  } catch (err) {
+    if (isAbort(err) || !ctx.live()) return;
+    cmp[kind][city.en] = { st: 'err', err };
+  }
+  renderCmp(kind);
+}
+// ข้อมูลเทียบ 2 เมืองยังเตรียมไม่เสร็จ: ลองใหม่ทุก 60 วินาทีระหว่างที่ยังเปิดหน้านี้อยู่
+function scheduleSuhiRetry(ctx) {
+  if (suhiTimer) return;
+  suhiTimer = setTimeout(() => {
+    suhiTimer = null;
+    if (!ctx.live()) return;
+    cmpCities().forEach(c => { if ((cmp.suhi[c.en] || {}).st === 'wait') fetchCmp('suhi', c, ctx); });
+  }, 60000);
+}
+
+function renderCmp(kind) {
+  if (!$('cmpCards')) return;
+  if (kind === 'suhi') { renderCmpWait(); renderCmpCards(); renderCmpTrend(); }
+  else if (kind === 'change') renderCmpChange();
+  else { renderCmpPeople(); renderCmpPlant(); }
+}
+const slotOf = (kind, c) => cmp[kind][c.en] || { st: 'load' };
+const skel = () => '<div class="skel" style="width:60%;height:24px"></div><div class="skel"></div><div class="skel" style="width:80%"></div>';
+const inlineErr = err => errSlot(err, 'cmp', true);
+const cityCard = (c, i, body) => `<div class="city" style="--c:${CITY_COLORS[i]}"><h4>${esc(cityShort(c.en))}</h4>${body}</div>`;
+const rowOfYear = (d, y) => (Array.isArray(d.rows) ? d.rows.find(r => r && r.year === y) : null);
+
+function renderCmpWait() {
+  const waits = cmpCities().map(c => slotOf('suhi', c)).filter(s => s.st === 'wait');
+  if (!waits.length) { $('cmpWait').innerHTML = ''; return; }
+  const p = (waits[0].d && waits[0].d.progress) || {};
+  const prog = isNum(p.ready) && isNum(p.total) ? ` (${p.ready}/${p.total} ชุด)` : '';
+  $('cmpWait').innerHTML = '<div class="state wait" role="status"><div class="spin sm"></div><span></span></div>';
+  $('cmpWait').querySelector('span').textContent = `ข้อมูลสำหรับเทียบสองเมืองกำลังเตรียมอยู่${prog} ระบบจะลองใหม่ทุก 1 นาที ระหว่างนี้ดูหัวข้อ 3–5 ได้ก่อน`;
+}
+
+function renderCmpCards() {
+  const cities = cmpCities();
+  const vals = [];
+  setHTML($('cmpCards'), cities.map((c, i) => {
+    const s = slotOf('suhi', c);
+    let body;
+    if (s.st === 'load') body = skel();
+    else if (s.st === 'wait') body = '<p>กำลังเตรียมข้อมูล…</p>';
+    else if (s.st === 'err') body = inlineErr(s.err);
+    else {
+      const r = rowOfYear(s.d, state.year);
+      if (!r || !isNum(r.suhii)) body = `<p>ปี ${state.year} มีข้อมูลไม่พอ (อาจมีเมฆมาก) ลองเลือกปีหรือฤดูอื่น</p>`;
+      else {
+        vals.push([c, r]);
+        const small = (r.n_urban || 0) < N_SENT || (r.n_rural || 0) < N_SENT;
+        body = `<div class="big">${sgn(r.suhii)}<small> °C</small></div>
+          <p class="ink"><span class="nw">เมือง ${isNum(r.urban) ? num(r.urban) : '–'} °C</span> · <span class="nw">ชนบท ${isNum(r.rural) ? num(r.rural) : '–'} °C</span></p>
+          <p><span class="nw">${nf(r.n_urban || 0)} ช่องในเมือง</span> · <span class="nw">${nf(r.n_rural || 0)} ช่องชนบท</span> · <span class="nw">${esc(srcLabel(r.source))}</span></p>` +
+          (s.d.urban_def === 'cluster' ? '<p class="warn">เขตเมืองหลักมีน้อย จึงใช้เขตเมืองที่กว้างขึ้น (urban cluster) แทน</p>' : '') +
+          (small ? `<p class="warn">จำนวนช่องไม่ถึง ${N_SENT} ควรตีความอย่างระวัง</p>` : '');
+      }
+    }
+    return cityCard(c, i, body);
+  }).join(''));
+  const hl = $('cmpHeadline');
+  if (vals.length === 2) {
+    const word = v => (v >= 0 ? 'ร้อนกว่า' : 'เย็นกว่า');
+    const [[a, ra], [b, rb]] = vals;
+    const nm = c => esc(cityShort(c.en)) + (cityShort(c.en).endsWith('ฯ') ? ' ' : '');
+    hl.innerHTML = `ปี ${state.year} (${esc(seasonShort())}) เขตเมือง${nm(a)}${word(ra.suhii)}ชนบทรอบ ๆ <b>${num(Math.abs(ra.suhii))} °C</b> ส่วน${nm(b)}${word(rb.suhii)} <b>${num(Math.abs(rb.suhii))} °C</b>`;
+    hl.hidden = false;
+  } else hl.hidden = true;
+}
+
+function renderCmpTrend() {
+  const box = $('cmpTrend');
+  const cities = cmpCities();
+  const slots = cities.map(c => slotOf('suhi', c));
+  const okIdx = slots.map((s, i) => (s.st === 'ok' ? i : -1)).filter(i => i >= 0);
+  killChart('cmp');
+  if (!okIdx.length) {
+    if (slots.some(s => s.st === 'load')) box.innerHTML = '<div class="loader"><div class="spin"></div><div>กำลังโหลดข้อมูล 20 ปี</div></div>';
+    else if (slots.some(s => s.st === 'wait')) box.innerHTML = '<div class="state wait"><span>กราฟจะแสดงเมื่อข้อมูลพร้อม</span></div>';
+    else setHTML(box, errSlot((slots.find(s => s.err) || {}).err, 'cmp'));
+    return;
+  }
+  const years = yearAxis();
+  const sw = years.findIndex(isViirsYear);
+  const fits = {};
+  const datasets = okIdx.map(i => {
+    const c = cities[i], col = CITY_COLORS[i], d = slots[i].d;
+    const by = Object.fromEntries((d.rows || []).filter(r => r && isNum(r.year)).map(r => [r.year, r]));
+    const viirs = y => (by[y] ? by[y].source === 'VIIRS' : isViirsYear(y));
+    fits[c.en] = ols(years.filter(y => !viirs(y) && by[y] && isNum(by[y].suhii)).map(y => [y, by[y].suhii]));
+    return {
+      label: cityShort(c.en), data: years.map(y => (by[y] && isNum(by[y].suhii) ? by[y].suhii : null)),
+      borderColor: col, backgroundColor: col, borderWidth: 2.2, tension: 0,
+      pointRadius: years.map(y => (y === state.year ? 6 : 3.2)), pointHoverRadius: 6, pointBorderWidth: 1.6, pointBorderColor: col,
+      pointBackgroundColor: years.map(y => (viirs(y) ? '#fff' : col)),
+      segment: { borderDash: s => (viirs(years[s.p1DataIndex]) ? [5, 4] : undefined) },
+      _rows: by
+    };
   });
-  $('histNote').hidden = false;
-  $('histNote').textContent = `${cfg.seasons[state.season]} · เทียบช่วง 2018–22 กับ 2003–07 · อาคารจาก GHSL ปี 2005 กับ 2020 · ใช้พื้นที่ที่ไม่เปลี่ยนเป็นตัวเทียบเพื่อหักผลของสภาพอากาศทั่วไป แต่การสร้างอาคารมักมาพร้อมการสูญเสียพืช จึงแยกสองสาเหตุนี้ออกจากกันไม่ได้`;
+  const missing = cities.filter((c, i) => !okIdx.includes(i)).map(c => cityShort(c.en));
+  box.innerHTML = `<div class="chart-wrap tall"><canvas id="cmpChart" role="img" aria-label="กราฟเส้น ความต่างอุณหภูมิเมืองกับชนบทรายปีของสองเมือง"></canvas></div>
+    <p class="note" style="margin-top:4px">จุดทึบ = MODIS Aqua · จุดโปร่งเส้นประ = VIIRS (ปรับเทียบให้ใกล้ Aqua) · จุดใหญ่ = ปีที่เลือก (${state.year})${missing.length ? ' · ยังไม่มีข้อมูลของ' + esc(missing.join(' และ ')) : ''}</p>
+    <div class="slopes">${okIdx.map(i => {
+      const c = cities[i], f = fits[c.en];
+      if (!f) return `<div><i style="background:${CITY_COLORS[i]}"></i><span><b>${esc(cityShort(c.en))}</b> ข้อมูลปี Aqua ไม่พอคำนวณแนวโน้ม</span></div>`;
+      const t = trendText(f);
+      return `<div><i style="background:${CITY_COLORS[i]}"></i><span><b>${esc(cityShort(c.en))}</b> ${t.slope} °C ต่อ 10 ปี <span class="muted">(ช่วงความเชื่อมั่น 95%: ${t.lo} ถึง ${t.hi})</span> · ${t.verdict}</span></div>`;
+    }).join('')}</div>
+    <p class="note">แนวโน้มคิดจากปี ${cfg.first_year}–${cfg.aqua_last_year} (Aqua) ด้วยการถดถอยเชิงเส้น · ช่วงความเชื่อมั่น = ความชัน ± 1.96 × ค่าคลาดเคลื่อนมาตรฐาน</p>`;
+  drawChart('cmp', 'cmpChart', {
+    type: 'line',
+    data: { labels: years, datasets },
+    options: {
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'top', align: 'end', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, boxHeight: 8, font: { size: 12 } } },
+        sensorSwitch: { index: sw > 0 ? sw : null },
+        tooltip: { callbacks: {
+          label: c => { if (c.parsed.y == null) return null; const r = c.dataset._rows[years[c.dataIndex]]; return `${c.dataset.label}: ${sgn(c.parsed.y)} °C` + (r && isNum(r.urban) && isNum(r.rural) ? ` (เมือง ${num(r.urban)} / ชนบท ${num(r.rural)})` : ''); },
+          footer: items => (isViirsYear(years[items[0].dataIndex]) ? 'VIIRS (ปรับเทียบ)' : 'MODIS Aqua')
+        } }
+      },
+      scales: {
+        y: { beginAtZero: true, grace: '6%', title: { display: true, text: 'เมือง − ชนบท (°C)' }, grid: { color: c => (c.tick.value === 0 ? '#8d969b' : '#efe9e0') } },
+        x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkipPadding: 8, font: { size: 11 } } }
+      }
+    }
+  }, { title: 'ความต่างอุณหภูมิพื้นผิวเมือง − ชนบท (SUHII) ' + cities.map(c => cityShort(c.en)).join(' vs '), sub: `${seasonFull()} · ปี ${cfg.first_year}–${cfg.last_year} · จุดโปร่งเส้นประ = VIIRS (ปรับเทียบ)`, file: 'suhii' });
+}
+
+function renderCmpChange() {
+  const box = $('cmpChange');
+  const cities = cmpCities();
+  const slots = cities.map(c => slotOf('change', c));
+  cities.forEach((c, i) => killChart('cmpChange' + i));
+  const ext = slots.flatMap(s => (s.st === 'ok' ? changeExtent(s.d) : []));
+  const rng = valueRange(ext.length ? ext : [0, 1]);
+  setHTML(box, cities.map((c, i) => {
+    const s = slots[i];
+    let body;
+    if (s.st === 'load') body = skel();
+    else if (s.st === 'err') body = inlineErr(s.err);
+    else if (!changeRows(s.d).length) body = '<p>ข้อมูลไม่พอสำหรับเทียบ</p>';
+    else {
+      const n = changeRows(s.d).length;
+      body = fastNote(s.d) + `<p class="ink">${changeSentence(s.d)}</p>
+        <div class="chart-wrap" style="height:${60 + n * 36}px"><canvas id="cmpChangeChart${i}" role="img" aria-label="แผนภูมิแท่ง อุณหภูมิที่เปลี่ยนไปของ${esc(cityShort(c.en))}"></canvas></div>
+        <button class="mini" data-act="png" data-chart="cmpChange${i}">${PNG_SVG}บันทึกรูป</button>`;
+    }
+    return cityCard(c, i, body);
+  }).join(''));
+  cities.forEach((c, i) => {
+    const s = slots[i];
+    if (s.st === 'ok' && changeRows(s.d).length) {
+      drawChart('cmpChange' + i, 'cmpChangeChart' + i, changeChartConfig(s.d, rng),
+        { title: `อุณหภูมิที่เปลี่ยนไป แยกตามระดับที่อาคารเพิ่ม · ${cityShort(c.en)}`, sub: `2003–07 → 2018–22 · ${seasonFull()} · เส้นขีด = ช่วงความเชื่อมั่น 95%`, file: 'change_' + c.en.replace(/\s+/g, '_') });
+    }
+  });
+}
+
+function renderCmpPeople() {
+  setHTML($('cmpPeople'), cmpCities().map((c, i) => {
+    const s = slotOf('summary', c);
+    let body;
+    if (s.st === 'load') body = skel();
+    else if (s.st === 'err') body = inlineErr(s.err);
+    else {
+      const h = hotPeople(s.d), pr = prioOf(s.d);
+      body = h.classified < 1 ? '<p>ไม่มีข้อมูลอุณหภูมิในย่านที่มีคนอยู่ปีนี้</p>'
+        : `<div class="big">${nfP(h.hot)}</div>
+          <p class="ink">(${pctText(h.pct)}% ของผู้อยู่อาศัยทั้งหมด) อยู่ในย่านที่ผิวร้อนเกิน ${cfg.very_hot} °C</p>` +
+          (h.showNoData ? `<p>ไม่มีข้อมูลอุณหภูมิ ${pctText(h.noDataPct)}% ของผู้อยู่อาศัย</p>` : '') + `
+          <p>ย่านเร่งด่วน ${km2(pr.uA)} ตร.กม. · คนราว ${nfP(pr.uP)}</p>` + (s.d.fast === false ? `<p class="warn">${FAST_NOTE}</p>` : '');
+    }
+    return cityCard(c, i, body);
+  }).join(''));
+}
+
+function renderCmpPlant() {
+  setHTML($('cmpPlant'), cmpCities().map((c, i) => {
+    const s = slotOf('summary', c);
+    let body;
+    if (s.st === 'load') body = skel();
+    else if (s.st === 'err') body = inlineErr(s.err);
+    else {
+      const { p2, p3, uA } = prioOf(s.d);
+      body = uA < 0.5 ? '<p class="ink">ไม่พบย่านเร่งด่วนในปีและฤดูนี้</p>'
+        : `<div class="big">${km2(uA)}<small> ตร.กม.</small></div>
+          <p class="ink">ย่านเร่งด่วน · ในนี้ <b>${km2(p3.area_km2)} ตร.กม.</b> มีพื้นที่ปลูกต้นไม้เพิ่มได้ (ที่ว่างรวมราว ${km2(p3.plant_km2)} ตร.กม.)</p>
+          <p>อีก ${km2(p2.area_km2)} ตร.กม. แทบไม่มีที่ว่าง → ต้นไม้ริมถนน หลังคาเขียว หรือหลังคาสีอ่อน</p>`;
+      body += `<button class="mini" data-act="goto" data-city="${esc(c.en)}">ดูบนแผนที่ →</button>`;
+    }
+    return cityCard(c, i, body);
+  }).join(''));
+}
+
+function gotoCity(en) {
+  state.tab = 'overview';
+  setLayer('priority');
+  selectProvince(en);
+}
+
+// =============================================================== ดาวน์โหลด
+function download(name, blob) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+}
+const csvCell = v => { if (v == null) return ''; const s = String(v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+function saveCsv(name, rows) {
+  const text = rows.map(r => (r || []).map(csvCell).join(',')).join('\r\n');
+  download(name, new Blob(['﻿' + text], { type: 'text/csv;charset=utf-8' }));
+}
+function regionName() {
+  if (!state.focus) return '';
+  return state.focus.province ? provTitle(state.focus.province) : state.focus.title;
+}
+function fileBase() {
+  const f = state.focus;
+  const r = !f ? 'area' : f.province ? f.province.replace(/\s+/g, '_') : f.payload.geometry ? 'drawn_area' : 'point';
+  return 'uhi_' + r;
+}
+const ciCols = r => { const c = ciOf(r); return c ? [r3(c.lo), r3(c.hi)] : ['', '']; };
+
+function exportCsv(what) {
+  const head = ['Urban Heat Explorer'];
+  if (what === 'compare') return exportCompareCsv();
+  if (what === 'overview' && last.summary) {
+    const d = last.summary, { p1, p2, p3 } = prioOf(d), h = hotPeople(d);
+    const rows = [head, ['พื้นที่', regionName()], ['ปี', d.year], ['ฤดู', seasonFull(d.season)], ['ดาวเทียม', d.source], ['พื้นที่ (ตร.กม.)', r3(d.area_km2)], [],
+      ['อุณหภูมิพื้นผิวช่วงบ่ายเฉลี่ยในย่านที่มีคนอยู่ (°C)', r3(d.lst_lived)], ['ประชากร (GHSL ' + (d.pop_epoch || '') + ')', Math.round(d.pop_total || 0)],
+      [`คนในย่านผิวเกิน ${cfg.very_hot} °C`, Math.round(h.hot), h.pct + '% ของผู้อยู่อาศัยทั้งหมด'],
+      ['คนในช่องที่ไม่มีข้อมูลอุณหภูมิ', Math.round(h.noData), h.noDataPct + '%'], [],
+      ['กลุ่ม', 'พื้นที่ (ตร.กม.)', 'คน', 'ที่ว่างปลูกต้นไม้ (ตร.กม.)'],
+      ['เร่งด่วน มีพื้นที่ปลูกต้นไม้เพิ่มได้', r3(p3.area_km2), Math.round(p3.people), r3(p3.plant_km2)],
+      ['เร่งด่วน ไม่มีที่ว่างปลูก', r3(p2.area_km2), Math.round(p2.people), r3(p2.plant_km2)],
+      ['เฝ้าระวัง', r3(p1.area_km2), Math.round(p1.people), ''], [],
+      ['ระดับอุณหภูมิพื้นผิว', 'คน'], ...h.ex.map(r => [LEVEL_NAMES[r.level], Math.round(r.people || 0)]), [],
+      ['พื้นผิว', 'สัดส่วนในย่านที่มีคนอยู่', 'สัดส่วนทั้งพื้นที่'], ...COVER.map(([k, n]) => [n, r3((d.cover_lived || {})[k]), r3((d.cover_all || {})[k])])];
+    if (Array.isArray(d.sensitivity) && d.sensitivity.length) {
+      rows.push([], ['ความไวต่อเกณฑ์: ผิวร้อนเกิน (°C)', 'สีเขียวน้อยกว่า', 'ย่านเร่งด่วน (ตร.กม.)', 'คน']);
+      d.sensitivity.forEach(r => rows.push([r.t, Math.round(r.g * 100) + '%', r3(r.area_km2), Math.round(r.people || 0)]));
+    }
+    return saveCsv(`${fileBase()}_overview_${d.year}_${d.season}.csv`, rows);
+  }
+  if (what === 'year' && last.bins) {
+    const d = last.bins, rows = [head, ['พื้นที่', regionName()], ['ปี', d.year], ['ฤดู', seasonFull(d.season)], ['ดาวเทียม', d.source], [],
+      ['แยกตาม', 'กลุ่ม', 'อุณหภูมิเฉลี่ย (°C)', 'SD', 'ช่อง (n)', 'ช่วง 95% ต่ำ', 'ช่วง 95% สูง']];
+    [['green', 'พื้นที่สีเขียว'], ['built', 'สิ่งปลูกสร้าง']].forEach(([k, n]) => (d[k] || []).forEach(r => rows.push([n, r.label, r3(r.mean), r3(r.sd), r.count, ...ciCols(r)])));
+    return saveCsv(`${fileBase()}_bins_${d.year}_${d.season}.csv`, rows);
+  }
+  if (what === 'trend' && last.trend) {
+    const d = last.trend, rows = [head, ['พื้นที่', regionName()], ['ฤดู', seasonFull(d.season)], [], ['ปี', 'ดาวเทียม', 'อุณหภูมิเฉลี่ย (°C)', 'SD', 'ช่อง (n)']];
+    (d.rows || []).forEach(r => rows.push([r.year, r.source, r3(r.lst), r3(r.sd), r.count]));
+    rows.push([], ['ปี GHSL', 'สัดส่วนอาคาร (%)']);
+    (d.built || []).forEach(b => rows.push([b.epoch, r3(b.built)]));
+    return saveCsv(`${fileBase()}_trend_${d.season}.csv`, rows);
+  }
+  if (what === 'change' && last.change) {
+    const d = last.change, rows = [head, ['พื้นที่', regionName()], ['ฤดู', seasonFull(d.season)], ['ช่วง', '2003–07 → 2018–22'], [],
+      ['กลุ่ม', 'อุณหภูมิที่เปลี่ยนไป (°C)', 'SD', 'ช่อง (n)', 'ช่วง 95% ต่ำ', 'ช่วง 95% สูง']];
+    (d.rows || []).forEach(r => rows.push([r.label, r3(r.mean), r3(r.sd), r.count, ...ciCols(r)]));
+    return saveCsv(`${fileBase()}_change_${d.season}.csv`, rows);
+  }
+  setStatus('ยังไม่มีข้อมูลให้ดาวน์โหลด รอให้โหลดเสร็จก่อน', 'warn');
+}
+
+function exportCompareCsv() {
+  const cities = cmpCities();
+  const rows = [['Urban Heat Explorer', cmpTitle()], ['ฤดู', seasonFull()], ['ปีที่เลือก', state.year], [],
+    ['ความต่างอุณหภูมิเมือง − ชนบท (SUHII)'], ['เมือง', 'ปี', 'ดาวเทียม', 'นิยามเขตเมือง', 'อุณหภูมิเมือง (°C)', 'อุณหภูมิชนบท (°C)', 'SUHII (°C)', 'ช่องเมือง (n)', 'ช่องชนบท (n)']];
+  cities.forEach(c => {
+    const s = slotOf('suhi', c);
+    if (s.st === 'ok') (s.d.rows || []).forEach(r => rows.push([cityShort(c.en), r.year, r.source, s.d.urban_def, r3(r.urban), r3(r.rural), r3(r.suhii), r.n_urban, r.n_rural]));
+    else rows.push([cityShort(c.en), 'ยังไม่มีข้อมูล']);
+  });
+  rows.push([], [`แนวโน้ม SUHII ปี ${cfg.first_year}–${cfg.aqua_last_year} (Aqua)`], ['เมือง', '°C ต่อ 10 ปี', 'ช่วง 95% ต่ำ', 'ช่วง 95% สูง', 'จำนวนปี']);
+  cities.forEach(c => {
+    const s = slotOf('suhi', c);
+    if (s.st !== 'ok') return;
+    const f = ols((s.d.rows || []).filter(r => r && r.source !== 'VIIRS' && r.year <= cfg.aqua_last_year && isNum(r.suhii)).map(r => [r.year, r.suhii]));
+    if (f) rows.push([cityShort(c.en), r3(f.b * 10), r3((f.b - 1.96 * f.se) * 10), r3((f.b + 1.96 * f.se) * 10), f.n]);
+  });
+  rows.push([], ['อุณหภูมิที่เปลี่ยนไป 2003–07 → 2018–22 แยกตามระดับที่อาคารเพิ่ม'], ['เมือง', 'กลุ่ม', 'อุณหภูมิที่เปลี่ยนไป (°C)', 'SD', 'ช่อง (n)', 'ช่วง 95% ต่ำ', 'ช่วง 95% สูง']);
+  cities.forEach(c => {
+    const s = slotOf('change', c);
+    if (s.st === 'ok') (s.d.rows || []).forEach(r => rows.push([cityShort(c.en), r.label, r3(r.mean), r3(r.sd), r.count, ...ciCols(r)]));
+  });
+  rows.push([], [`สรุปปี ${state.year} (${seasonShort()})`], ['เมือง', 'ประชากร (GHSL)', `คนในย่านผิวเกิน ${cfg.very_hot} °C`, '% ของผู้อยู่อาศัยทั้งหมด', 'คนในช่องที่ไม่มีข้อมูลอุณหภูมิ', 'ย่านเร่งด่วน (ตร.กม.)', 'คนในย่านเร่งด่วน', 'เร่งด่วนที่มีพื้นที่ปลูกต้นไม้เพิ่มได้ (ตร.กม.)', 'ที่ว่างปลูกต้นไม้ (ตร.กม.)']);
+  cities.forEach(c => {
+    const s = slotOf('summary', c);
+    if (s.st !== 'ok') return;
+    const h = hotPeople(s.d), pr = prioOf(s.d);
+    rows.push([cityShort(c.en), Math.round(h.total), Math.round(h.hot), h.pct, Math.round(h.noData), r3(pr.uA), Math.round(pr.uP), r3(pr.p3.area_km2), r3(pr.p3.plant_km2)]);
+  });
+  saveCsv(`uhi_compare_${state.year}_${state.season}.csv`, rows);
+}
+
+// บันทึกกราฟเป็น PNG พร้อมหัวเรื่องและที่มา (พื้นหลังขาว ใช้ในรายงานได้)
+function exportPng(key) {
+  const ch = charts[key];
+  if (!ch) { setStatus('ยังไม่มีกราฟให้บันทึก', 'warn'); return; }
+  const meta = chartMeta[key] || {};
+  // วาดกราฟใหม่ที่ความละเอียด 2 เท่าชั่วคราว ให้รูปคมพอใช้ในรายงาน
+  const prevRatio = ch.options.devicePixelRatio;
+  const hiRes = (window.devicePixelRatio || 1) < 2;
+  if (hiRes) { ch.options.devicePixelRatio = 2; ch.resize(); ch.draw(); }
+  const src = ch.canvas, r = src.width / Math.max(1, ch.width);
+  const pad = 18 * r, head = (meta.sub ? 56 : 38) * r, foot = 28 * r;
+  const out = document.createElement('canvas');
+  out.width = src.width + pad * 2;
+  out.height = src.height + head + foot;
+  const x = out.getContext('2d');
+  x.fillStyle = '#ffffff';
+  x.fillRect(0, 0, out.width, out.height);
+  x.textBaseline = 'top';
+  const fit = (text, size, weight, family) => {
+    let s = size;
+    do { x.font = `${weight} ${s * r}px ${family}`; s -= 0.5; } while (x.measureText(text).width > out.width - pad * 2 && s > 9);
+  };
+  x.fillStyle = '#1d2327';
+  fit(meta.title || '', 16, 600, "Anuphan, 'IBM Plex Sans Thai', sans-serif");
+  x.fillText(meta.title || '', pad, 12 * r);
+  if (meta.sub) {
+    x.fillStyle = '#6b7378';
+    fit(meta.sub, 12.5, 400, "'IBM Plex Sans Thai', sans-serif");
+    x.fillText(meta.sub, pad, 34 * r);
+  }
+  x.drawImage(src, pad, head);
+  x.fillStyle = '#6b7378';
+  const credit = 'Urban Heat Explorer · ข้อมูล: NASA MODIS/VIIRS, GHSL (JRC), Dynamic World, ESA WorldCover';
+  fit(credit, 11, 400, "'IBM Plex Sans Thai', sans-serif");
+  x.fillText(credit, pad, head + src.height + 8 * r);
+  if (hiRes) { ch.options.devicePixelRatio = prevRatio; ch.resize(); }
+  out.toBlob(b => { if (b) download(`${key.startsWith('cmp') ? 'uhi_compare' : fileBase()}_${meta.file || key}.png`, b); }, 'image/png');
 }
 
 // ---------- ปุ่มในแผงข้อมูล ----------
+$('panel').addEventListener('click', e => {
+  const b = e.target.closest('button[data-act]');
+  if (!b) return;
+  const act = b.dataset.act;
+  if (act === 'png') exportPng(b.dataset.chart);
+  else if (act === 'csv') exportCsv(b.dataset.what);
+  else if (act === 'compare') openCompare();
+  else if (act === 'goto') gotoCity(b.dataset.city);
+  else if (act === 'retry') {
+    if (b.dataset.what === 'cmp') loadCompare(); else refreshPanel();
+  }
+});
 document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
   state.tab = b.dataset.tab;
   refreshPanel();
 }));
+$('tabs').addEventListener('keydown', e => {
+  if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+  const i = TABS.indexOf(state.tab), n = TABS.length;
+  state.tab = TABS[(i + (e.key === 'ArrowRight' ? 1 : n - 1)) % n];
+  refreshPanel();
+  $('t-' + state.tab).focus();
+});
+function segSelect(id, b) {
+  document.querySelectorAll('#' + id + ' button').forEach(x => {
+    x.classList.toggle('on', x === b);
+    x.setAttribute('aria-pressed', String(x === b));
+  });
+}
 document.querySelectorAll('#yearSeg button').forEach(b => b.addEventListener('click', () => {
   state.yearView = b.dataset.view;
-  document.querySelectorAll('#yearSeg button').forEach(x => x.classList.toggle('on', x === b));
+  segSelect('yearSeg', b);
   if (state.focus) loadYear();
 }));
 document.querySelectorAll('#histSeg button').forEach(b => b.addEventListener('click', () => {
   state.histView = b.dataset.view;
-  document.querySelectorAll('#histSeg button').forEach(x => x.classList.toggle('on', x === b));
+  segSelect('histSeg', b);
   if (state.focus) loadHistory();
 }));
-$('btnPanel').addEventListener('click', () => setPanel(!document.body.classList.contains('panel-open')));
+$('btnPanel').addEventListener('click', () => {
+  if (state.panel && state.view === 'area') setPanel(false);
+  else openArea();
+});
+$('btnCompare').addEventListener('click', () => {
+  if (cmpOpen()) setPanel(false); else openCompare();
+});
+$('btnBack').addEventListener('click', openArea);
 $('btnPanelClose').addEventListener('click', () => setPanel(false));
+$('sheetHandle').addEventListener('click', () => setSheet(document.body.classList.contains('sheet-min')));
 L.DomEvent.disableClickPropagation($('panel'));
 L.DomEvent.disableScrollPropagation($('panel'));
 L.DomEvent.disableClickPropagation($('bar'));
+L.DomEvent.disableScrollPropagation($('bar'));
 
-// แถบล่างอาจขึ้นสองบรรทัด ให้สัญลักษณ์และเครดิตแผนที่ขยับตามความสูงจริง
+// แถบล่างอาจขึ้นหลายบรรทัด ให้สัญลักษณ์ แผงข้อมูล (จอเล็ก) และเครดิตแผนที่ขยับตามความสูงจริง
 new ResizeObserver(() => {
   document.documentElement.style.setProperty('--bar-real', $('bar').offsetHeight + 'px');
 }).observe($('bar'));
@@ -968,11 +2100,12 @@ let drawing = false, activeDraw = null;
 
 // 1) คลิกจุด
 map.on('click', e => {
-  if (drawing) return;
+  if (drawing || !booted) return;
+  if (document.body.classList.contains('legend-open') && window.innerWidth <= 860) toggleLegend(false);
   $('province').value = '';
   const { lat, lng } = e.latlng;
   setFocusLayer(L.circle(e.latlng, { ...FOCUS_STYLE, radius: cfg.point_radius_m, interactive: false }).addTo(map));
-  newFocus({ lat, lon: lng }, `รัศมี ${cfg.point_radius_m / 1000} กม. รอบจุดที่เลือก`);
+  newFocus({ lat: +lat.toFixed(5), lon: +lng.toFixed(5) }, `รัศมี ${cfg.point_radius_m / 1000} กม. รอบจุดที่เลือก`);
 });
 
 // 2) วาดพื้นที่
@@ -985,27 +2118,42 @@ function cancelDraw() {
   $('btnPoly').classList.remove('on');
   $('btnRect').classList.remove('on');
 }
-
 function startDraw(kind) {
-  const wasOn = (kind === 'rect' ? $('btnRect') : $('btnPoly')).classList.contains('on');
+  const btn = kind === 'rect' ? $('btnRect') : $('btnPoly');
+  const wasOn = btn.classList.contains('on');
   cancelDraw();
   if (wasOn) return;
   const opts = { shapeOptions: { ...FOCUS_STYLE, dashArray: null }, showArea: false };
   activeDraw = kind === 'rect' ? new L.Draw.Rectangle(map, opts) : new L.Draw.Polygon(map, { ...opts, allowIntersection: false });
   activeDraw.enable();
-  (kind === 'rect' ? $('btnRect') : $('btnPoly')).classList.add('on');
+  btn.classList.add('on');
 }
-
 map.on(L.Draw.Event.DRAWSTART, () => { drawing = true; });
 map.on(L.Draw.Event.DRAWSTOP, () => {
   setTimeout(() => { drawing = false; }, 300);
   $('btnPoly').classList.remove('on');
   $('btnRect').classList.remove('on');
 });
+// พื้นที่ (ตร.กม.) โดยประมาณของรูปที่วาด
+function ringAreaKm2(latlngs) {
+  const R = 6371.0088, rad = Math.PI / 180;
+  let s = 0;
+  for (let i = 0; i < latlngs.length; i++) {
+    const p1 = latlngs[i], p2 = latlngs[(i + 1) % latlngs.length];
+    s += (p2.lng - p1.lng) * rad * (2 + Math.sin(p1.lat * rad) + Math.sin(p2.lat * rad));
+  }
+  return Math.abs(s * R * R / 2);
+}
 map.on(L.Draw.Event.CREATED, e => {
   activeDraw = null;
-  $('province').value = '';
   const layer = e.layer;
+  const ring = layer.getLatLngs()[0] || [];
+  const area = ringAreaKm2(ring);
+  if (cfg.max_area_km2 && area > cfg.max_area_km2) {
+    setStatus(`พื้นที่ที่วาดใหญ่เกินไป (ราว ${nf(area)} ตร.กม.) วาดได้ไม่เกิน ${nf(cfg.max_area_km2)} ตร.กม. หรือเลือกเป็นจังหวัดแทน`, 'warn');
+    return;
+  }
+  $('province').value = '';
   layer.options.interactive = false;
   layer.addTo(map);
   setFocusLayer(layer);
@@ -1015,24 +2163,20 @@ $('btnPoly').addEventListener('click', () => startDraw('poly'));
 $('btnRect').addEventListener('click', () => startDraw('rect'));
 
 // 3) เลือกจังหวัด (แสดงชื่อไทย ส่งชื่ออังกฤษไปเซิร์ฟเวอร์)
-let provinces = [];   // [{en, th}]
-const provTh = en => (provinces.find(p => p.en === en) || {}).th || en;
-const provTitle = en => (en === 'Bangkok' ? '' : 'จังหวัด') + provTh(en);
-
+function fillProvList() {
+  $('provList').innerHTML = provinces.map(p => `<option value="${esc(p.th)}" label="${esc(p.en)}"></option>`).join('');
+}
 async function loadProvinces() {
   try {
     const list = await api('/api/provinces');
-    if (!Array.isArray(list)) throw new Error('รายชื่อจังหวัดผิดรูปแบบ');
-    provinces = list.map(p => (typeof p === 'string' ? { en: p, th: p } : p))
+    if (!Array.isArray(list) || !list.length) return;
+    provinces = list.map(p => (typeof p === 'string' ? { en: p, th: PROVINCE_TH[p] || p } : { en: p.en, th: p.th || PROVINCE_TH[p.en] || p.en }))
       .sort((a, b) => a.th.localeCompare(b.th, 'th'));
-    $('provList').innerHTML = provinces.map(p => `<option value="${p.th}" label="${p.en}"></option>`).join('');
-    if (state.focus && state.focus.payload.province) $('pTitle').textContent = provTitle(state.focus.payload.province);
-  } catch (err) {
-    setStatus('โหลดรายชื่อจังหวัดไม่ได้: ' + errMsg(err));
-  }
+    fillProvList();
+  } catch (err) { /* ใช้รายชื่อที่ฝังไว้ในหน้าเว็บแทน */ }
 }
 
-// ซูมไปที่พื้นที่ เว้นที่ให้แผงข้อมูล (ถ้าหน้าถูกซ่อนอยู่ ขนาดแผนที่เป็น 0 จะรอจนกลับมาแสดง)
+// ซูมไปที่พื้นที่ เว้นที่ให้แผงข้อมูลและแถบล่าง (ถ้าหน้าถูกซ่อนอยู่ ขนาดแผนที่เป็น 0 จะรอจนกลับมาแสดง)
 function fitFocus(layer) {
   map.invalidateSize();
   const size = map.getSize();
@@ -1040,8 +2184,11 @@ function fitFocus(layer) {
     document.addEventListener('visibilitychange', () => { if (focusLayer === layer) fitFocus(layer); }, { once: true });
     return;
   }
-  const wide = document.body.classList.contains('panel-open') && window.innerWidth > 860;
-  map.fitBounds(layer.getBounds(), { paddingTopLeft: [20, 20], paddingBottomRight: [wide ? $('panel').offsetWidth + 30 : 20, 100], maxZoom: 13 });
+  const mobile = window.innerWidth <= 860, open = state.panel;
+  const bar = $('bar').offsetHeight + 24;
+  const right = open && !mobile ? $('panel').offsetWidth + 30 : 20;
+  const bottom = mobile && open ? bar + $('panel').offsetHeight + 10 : bar;
+  map.fitBounds(layer.getBounds(), { paddingTopLeft: [mobile ? 50 : 60, mobile ? 56 : 20], paddingBottomRight: [right, bottom], maxZoom: 13 });
 }
 
 async function selectProvince(en) {
@@ -1049,24 +2196,26 @@ async function selectProvince(en) {
   setFocusLayer(null);
   $('province').value = provTh(en);
   newFocus({ province: en }, provTitle(en));
+  const ctx = newCtx('shape');
   try {
-    const g = await api('/api/province_shape?name=' + encodeURIComponent(en));
-    if (!state.focus || state.focus.payload.province !== en) return;
+    const g = await api('/api/province_shape?name=' + encodeURIComponent(en), { signal: ctx.signal });
+    if (!ctx.live()) return;
     const layer = L.geoJSON(g, { interactive: false, style: FOCUS_STYLE }).addTo(map);
     setFocusLayer(layer);
     fitFocus(layer);
   } catch (err) {
-    setStatus('โหลดขอบเขตจังหวัดไม่ได้: ' + errMsg(err));
+    if (!isAbort(err) && ctx.live()) setStatus('โหลดขอบเขตจังหวัดไม่ได้: ' + errMsg(err), 'warn');
   }
 }
 
 function tryProvinceInput() {
   const v = $('province').value.trim().replace(/^จังหวัด\s*/, '').toLowerCase();
   if (!v) return;
+  if (state.focus && state.focus.province && provTh(state.focus.province).toLowerCase() === v) return;
   const hit = provinces.find(p => p.th.toLowerCase() === v || p.en.toLowerCase() === v)
     || provinces.find(p => p.th.toLowerCase().startsWith(v) || p.en.toLowerCase().startsWith(v));
   if (hit) selectProvince(hit.en);
-  else setStatus('ไม่พบจังหวัดนี้ ลองพิมพ์ชื่อไทยหรืออังกฤษ เช่น เชียงใหม่ หรือ Chiang Mai');
+  else setStatus('ไม่พบจังหวัดนี้ ลองพิมพ์ชื่อไทยหรืออังกฤษ เช่น เชียงใหม่ หรือ Chiang Mai', 'warn');
 }
 $('province').addEventListener('change', tryProvinceInput);
 $('province').addEventListener('keydown', e => { if (e.key === 'Enter') tryProvinceInput(); });
@@ -1082,79 +2231,273 @@ $('btnClear').addEventListener('click', () => {
   seq++;
   cache = {};
   state.focus = null;
-  $('pTitle').textContent = 'ยังไม่ได้เลือกพื้นที่';
-  Object.keys(charts).forEach(k => { if (charts[k]) { charts[k].destroy(); charts[k] = null; } });
+  abortScope('area');
+  abortScope('shape');
+  ['year', 'history', 'hist2'].forEach(killChart);
   refreshPanel();
 });
 
 // =============================================================== ปี / ฤดู
+function fillYears() {
+  const sel = $('year');
+  sel.innerHTML = '';
+  for (let y = cfg.last_year; y >= cfg.first_year; y--) sel.add(new Option(String(y), String(y)));
+  if (state.year < cfg.first_year || state.year > cfg.last_year) state.year = cfg.default_year;
+  sel.value = String(state.year);
+}
+function buildSeasonSeg() {
+  const order = Array.isArray(cfg.season_order) && cfg.season_order.length ? cfg.season_order : Object.keys(cfg.seasons);
+  if (!order.includes(state.season)) state.season = order[0];
+  $('seasonSeg').innerHTML = order.map(s => `<button data-season="${esc(s)}" class="${s === state.season ? 'on' : ''}" aria-pressed="${s === state.season}" title="${esc(seasonFull(s))}">${esc(seasonShort(s))}</button>`).join('');
+}
+$('seasonSeg').addEventListener('click', e => {
+  const b = e.target.closest('button[data-season]');
+  if (!b || b.dataset.season === state.season) return;
+  state.season = b.dataset.season;
+  segSelect('seasonSeg', b);
+  if (!booted) return;
+  loadOverlay();
+  refreshPanelForChange(false);
+});
 $('year').addEventListener('change', e => {
   state.year = +e.target.value;
+  if (!booted) return;
   loadOverlay();
-  if (state.focus && state.tab !== 'history') refreshPanel(); else updateSub();
+  refreshPanelForChange(true);
 });
-document.querySelectorAll('#seasonSeg button').forEach(b => b.addEventListener('click', () => {
-  state.season = b.dataset.season;
-  document.querySelectorAll('#seasonSeg button').forEach(x => x.classList.toggle('on', x === b));
-  loadOverlay();
-  if (state.focus) refreshPanel(); else updateSub();
-}));
+// ปีหรือฤดูเปลี่ยน: แท็บย้อนหลังไม่ขึ้นกับปี จึงไม่ต้องโหลดใหม่เมื่อเปลี่ยนแค่ปี
+function refreshPanelForChange(yearOnly) {
+  if (!state.panel) { writeHash(); return; }
+  if (state.view === 'compare' || (state.focus && !(yearOnly && state.tab === 'history'))) refreshPanel();
+  else { updateHead(); writeHash(); }
+}
 
 // =============================================================== คำอธิบาย
-function openHelp(open) { $('help').classList.toggle('open', open); }
+let helpReturn = null;
+function openHelp(open) {
+  $('help').classList.toggle('open', open);
+  if (open) { helpReturn = document.activeElement; $('helpClose').focus(); }
+  else if (helpReturn && helpReturn.focus) helpReturn.focus();
+}
 $('btnHelp').addEventListener('click', () => openHelp(true));
+// กด Tab วนอยู่ในกล่องคำอธิบายขณะเปิด
+$('help').addEventListener('keydown', e => {
+  if (e.key !== 'Tab') return;
+  const f = Array.from($('help').querySelectorAll('button, [href], [tabindex]:not([tabindex="-1"])')).filter(el => el.offsetParent !== null);
+  if (!f.length) return;
+  const first = f[0], lastEl = f[f.length - 1];
+  if (!$('help').contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+  else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); lastEl.focus(); }
+  else if (!e.shiftKey && document.activeElement === lastEl) { e.preventDefault(); first.focus(); }
+});
 $('helpClose').addEventListener('click', () => openHelp(false));
 $('help').addEventListener('click', e => { if (e.target === $('help')) openHelp(false); });
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
-  if ($('help').classList.contains('open')) openHelp(false); else cancelDraw();
+  if ($('help').classList.contains('open')) openHelp(false);
+  else if (activeDraw) cancelDraw();
+  else if (document.body.classList.contains('legend-open')) toggleLegend(false);
 });
 
-function renderHelpCriteria() {
-  const c = cfg.prio_colors;
-  $('helpCrit').innerHTML = `
-    <div class="crit"><i style="background:${c[2]}"></i><div><b>เร่งด่วน · มีที่โล่ง</b> ช่วงบ่ายร้อนเกิน ${cfg.very_hot} °C, คนอยู่ ${nf(cfg.pop_dense)} คน/ตร.กม. ขึ้นไป, พื้นที่สีเขียวไม่ถึง ${Math.round(cfg.green_low * 100)}% และมีที่โล่งอย่างน้อย ${Math.round(cfg.open_min * 100)}% ของช่อง → เริ่มทำสวนหรือปลูกต้นไม้ได้ก่อน</div></div>
-    <div class="crit"><i style="background:${c[1]}"></i><div><b>เร่งด่วน · ไม่มีที่โล่ง</b> เงื่อนไขเดียวกันแต่ที่โล่งไม่ถึง ${Math.round(cfg.open_min * 100)}% → ใช้วิธีอื่น เช่น ต้นไม้ริมถนน หลังคาเขียว หลังคาสีอ่อน</div></div>
-    <div class="crit"><i style="background:${c[0]}"></i><div><b>เฝ้าระวัง</b> ช่วงบ่ายร้อนเกิน ${cfg.hot} °C และมีคนอยู่ ${nf(cfg.pop_any)} คน/ตร.กม. ขึ้นไป</div></div>
-    <small>เกณฑ์ประชากรอ้างอิงนิยามเขตเมืองของ GHSL (${nf(cfg.pop_any)} และ ${nf(cfg.pop_dense)} คน/ตร.กม.) ส่วนเกณฑ์อื่นเป็นค่าเริ่มต้นที่ตั้งขึ้นสำหรับโครงงานนี้ ปรับได้ในไฟล์ app.py</small>`;
+function renderHelp() {
+  const c = cfg.prio_colors, s = cfg.suhi || DEFAULT_CFG.suhi, ring = s.ring_km || [2, 20];
+  const by = cfg.bias_years || [2013, 2020], cy = cfg.check_years || [2021, 2022];
+  // 1 ช่อง (30 ฟิลิปดา) ≈ 0.83 ตร.กม. ≈ 520 ไร่ (1 ตร.กม. = 625 ไร่) → 5% ≈ 26 ไร่
+  const rai = Math.round(cfg.plant_min * 0.83 * 625);
+  const seasons = (cfg.season_order || []).filter(k => k !== 'all').map(k => `<b>${esc(seasonShort(k))}</b> ${esc((seasonFull(k).match(/\((.*)\)/) || [])[1] || '')}`).join(' · ');
+  $('helpBody').innerHTML = `
+    <h2 id="helpTitle">แผนที่นี้บอกอะไร</h2>
+    <p>เมืองที่มีอาคาร ถนน และลานคอนกรีตมาก จะเก็บความร้อนจากแดดไว้ ขณะที่ต้นไม้ให้ร่มเงาและคายน้ำช่วยลดความร้อน แผนที่นี้ใช้ข้อมูลดาวเทียมราว 20 ปี ดูว่าเมืองร้อนขึ้นแค่ไหนเมื่ออาคารเพิ่มขึ้น หา<b>ย่านที่ควรปรับปรุงก่อน</b> และดูว่ายังมีที่ว่างพอปลูกต้นไม้เพิ่มหรือไม่ เพื่อเป็นข้อมูลประกอบนโยบายเพิ่มพื้นที่สีเขียวในเมือง</p>
+
+    <h3>ผลการศึกษาเทียบสองเมือง</h3>
+    <p>ปุ่ม “เทียบ 2 เมือง” เทียบ${esc(cmpCities().map(x => cityShort(x.en)).join(' กับ'))} ด้วย <b>ความต่างอุณหภูมิเมือง–ชนบท (SUHII)</b> = อุณหภูมิพื้นผิวเฉลี่ยของเขตเมืองหลัก ลบด้วยของพื้นที่ชนบทรอบ ๆ ยิ่งค่ามาก แปลว่าเมืองร้อนกว่าชนบทมาก</p>
+    <ul>
+      <li><b>เขตเมืองหลัก</b> = ช่องที่ GHSL จัดเป็นศูนย์กลางเมือง (urban centre ระดับ ${s.urban_code}) ในจังหวัด ใช้นิยามเดียวกันทั้งสองเมือง ถ้ามีไม่ถึง 3 ช่องจะใช้เขตเมืองที่กว้างขึ้น (urban cluster) แทน</li>
+      <li><b>ชนบทอ้างอิง</b> = ช่องชนบท (ระดับ ${(s.rural_codes || []).join(', ')}) ที่อยู่ห่างเขตเมือง ${ring[0]}–${ring[1]} กม. ไม่ใช่แหล่งน้ำ และสูงต่างจากเมืองไม่เกิน ${s.elev_tol_m} ม. (อาจอยู่ในจังหวัดข้างเคียง)</li>
+      <li>ไม่เทียบทั้งจังหวัด เพราะกรุงเทพฯ เป็นเมืองเกือบทั้งจังหวัด แต่ขอนแก่นส่วนใหญ่เป็นชนบท</li>
+    </ul>
+
+    <h3>ย่านที่ควรปรับปรุง (ช่องละประมาณ 1 × 1 กม.)</h3>
+    <div class="crit"><i style="background:${c[1]}"></i><div><b>เร่งด่วน</b> ผิวร้อนช่วงบ่ายเกิน ${cfg.very_hot} °C, คนอยู่ ${nf(cfg.pop_dense)} คน/ตร.กม. ขึ้นไป และพื้นที่สีเขียว (ต้นไม้ + หญ้า) ไม่ถึง ${Math.round(cfg.green_low * 100)}% · แผงข้อมูลแยกต่อว่าย่านไหน <b>มีพื้นที่ปลูกต้นไม้เพิ่มได้</b> (อย่างน้อย ${Math.round(cfg.plant_min * 100)}% ของช่อง หรือราว ${rai} ไร่) และย่านไหนไม่มี ต้องใช้วิธีอื่น เช่น ต้นไม้ริมถนน หลังคาเขียว หลังคาสีอ่อน</div></div>
+    <div class="crit"><i style="background:${c[0]}"></i><div><b>เฝ้าระวัง</b> ผิวร้อนช่วงบ่ายเกิน ${cfg.hot} °C และมีคนอยู่ ${nf(cfg.pop_any)} คน/ตร.กม. ขึ้นไป</div></div>
+    <small>เกณฑ์ประชากรอ้างอิงนิยามเขตเมืองของ GHSL ส่วนเกณฑ์อุณหภูมิและพื้นที่สีเขียวเป็นค่าที่ตั้งขึ้นสำหรับโครงงานนี้ ดูตาราง “ความไวของผลต่อเกณฑ์” ในแผงข้อมูลว่าผลเปลี่ยนไปเท่าไรถ้าเปลี่ยนเกณฑ์ และหลัก 3-30-300 แนะนำให้มีร่มไม้อย่างน้อย 30% ในแต่ละย่าน</small>
+
+    <h3>คำศัพท์</h3>
+    <ul>
+      <li><b>อุณหภูมิพื้นผิวช่วงบ่าย (ราว 12–14 น.)</b> ความร้อนของ “ผิว” เช่น หลังคา ถนน ดิน ใบไม้ ที่ดาวเทียมวัดได้ มักสูงกว่าอุณหภูมิอากาศในพยากรณ์อากาศ</li>
+      <li><b>ระดับ ${LEVEL_NAMES.join(' / ')}</b> แบ่งเพื่อให้เห็นภาพ (${cfg.lst_breaks.join(', ')} °C)</li>
+      <li><b>ฤดู</b> ${seasons} (แบ่งตามกรมอุตุนิยมวิทยา) หน้าฝนมีเมฆมาก ข้อมูลอาจน้อย</li>
+      <li><b>วันฟ้าโปร่ง</b> ใช้เฉพาะช่องที่มีวันฟ้าโปร่งอย่างน้อย ${cfg.n_min} วันในฤดูของปีนั้น ช่องที่น้อยกว่านี้ถือว่าไม่มีข้อมูล</li>
+      <li><b>พื้นที่สีเขียว</b> ต้นไม้ หญ้า และพุ่มไม้ที่มีอยู่แล้ว</li>
+      <li><b>พื้นที่ปลูกต้นไม้เพิ่มได้</b> หญ้า พุ่มไม้ และดินเปล่าในย่านที่มีคนอยู่ คือที่ที่ยังไม่มีต้นไม้ ไม่นับนา ไร่ และแหล่งน้ำ (หญ้าจึงเป็นทั้งพื้นที่สีเขียวและที่ที่ปลูกต้นไม้เพิ่มได้)</li>
+      <li><b>สัดส่วนพื้นผิว</b> ดูว่าแต่ละจุด 10 ม. เป็นประเภทไหนบ่อยที่สุดตลอดปี (Dynamic World) แล้วนับเป็นสัดส่วนพื้นที่</li>
+      <li><b>ช่วงความเชื่อมั่น 95%</b> ช่วงที่ค่าเฉลี่ยจริงน่าจะอยู่ ถ้าช่วงของสองกลุ่มไม่ซ้อนกัน ถือว่าต่างกันชัดเจน</li>
+    </ul>
+
+    <h3>ข้อควรรู้</h3>
+    <ul>
+      <li>ตัวเลขที่เทียบกันเป็น<b>ความสัมพันธ์</b> ไม่ได้พิสูจน์สาเหตุ เช่น ย่านที่สร้างอาคารเพิ่มมักสูญเสียต้นไม้ไปพร้อมกัน</li>
+      <li>ข้อมูลอุณหภูมิละเอียดช่องละราว 1 กม. จึงเห็นภาพระดับย่าน ไม่ใช่รายบ้านหรือรายถนน</li>
+      <li>“พื้นที่ปลูกต้นไม้เพิ่มได้” เป็นแค่<b>จุดที่น่าตรวจสอบ</b> ต้องดูเจ้าของที่ดินและแผนการใช้ที่ดินหรือผังเมืองก่อนเสนอ และใช้แผนที่ปี 2021 บางแห่งอาจถูกสร้างไปแล้ว</li>
+      <li>ประชากรจาก GHSL เป็นการประมาณผู้อยู่อาศัยจริง (รวมผู้ไม่ได้ย้ายทะเบียนบ้าน) จึงมากกว่าตัวเลขทะเบียนราษฎร์ เช่น กรุงเทพฯ ราว 11 ล้านคน เทียบกับทะเบียนราว 5.5 ล้านคน และเป็นการสัมผัสความร้อน ไม่ใช่จำนวนผู้ป่วย</li>
+      <li>ระดับผิวเย็นถึงผิวร้อนจัดเป็นระดับของอุณหภูมิพื้นผิว ไม่ใช่เกณฑ์อากาศร้อนของกรมอุตุนิยมวิทยา (ซึ่งใช้อุณหภูมิอากาศ)</li>
+      <li>${CI_NOTE}</li>
+    </ul>
+
+    <h3>แหล่งข้อมูล</h3>
+    <ul>
+      <li>อุณหภูมิพื้นผิว: NASA MODIS Aqua (MYD11A1) ปี ${cfg.first_year}–${cfg.aqua_last_year} และ VIIRS (VNP21A1D) ปี ${cfg.aqua_last_year + 1} เป็นต้นไป ปรับค่า VIIRS ให้อยู่ระดับเดียวกับ Aqua ทีละช่อง จากผลต่างของสองดาวเทียมในวันเดียวกัน (ปี ${by[0]}–${by[1]}) แล้วตรวจสอบกับปี ${cy[0]}–${cy[1]} ซึ่งไม่ได้ใช้ตอนปรับเทียบ</li>
+      <li>พื้นผิว: Dynamic World V1 ปี ${cfg.dw_first_year} เป็นต้นไป (This dataset is produced for the Dynamic World Project by Google in partnership with National Geographic Society and the World Resources Institute.)</li>
+      <li>พื้นที่ปลูกต้นไม้เพิ่มได้: ESA WorldCover 2021 ละเอียด 10 ม.</li>
+      <li>สิ่งปลูกสร้างย้อนหลัง ประชากร และระดับความเป็นเมือง: GHSL BUILT-S, POP และ SMOD (European Commission JRC)</li>
+      <li>ความสูงภูมิประเทศ: SRTM (NASA)</li>
+      <li>ขอบเขตจังหวัด: FAO GAUL 2015 (ใช้เพื่อการศึกษา ไม่ใช่เชิงพาณิชย์) ในชุดนี้บึงกาฬยังรวมอยู่กับหนองคาย</li>
+    </ul>`;
 }
 
+// จำนวนชุดที่คำนวณล่วงหน้าเสร็จแล้ว: ถ้าเพิ่มขึ้นและชั้นที่เปิดอยู่ยังเป็นแบบช้า ให้ขอชั้นใหม่ (แบบเร็ว)
+function setPrecompute(pre) {
+  if (!pre || !isNum(pre.ready)) return;
+  const changed = precomputeReady != null && pre.ready !== precomputeReady;
+  precomputeReady = pre.ready;
+  if (changed && booted && overlayInfo && overlayInfo.fast === false) loadOverlay();
+}
+let coverageTimer = null;
 async function loadCoverage() {
+  clearTimeout(coverageTimer);
+  let more = true;
   try {
-    const r = await fetch('/api/coverage');
-    const d = await r.json();
-    if (!r.ok) return;
+    const d = await api('/api/coverage');
     const parts = [];
     if (d.viirs_last) parts.push(`ข้อมูลอุณหภูมิ VIIRS ล่าสุดในระบบ: ${d.viirs_last}`);
-    if (d.precompute) {
+    if (d.precompute && isNum(d.precompute.ready) && isNum(d.precompute.total)) {
       const { ready, total } = d.precompute;
-      parts.push(ready >= total ? 'ข้อมูลทุกปีคำนวณล่วงหน้าไว้แล้ว (โหลดเร็ว)'
-        : `กำลังคำนวณข้อมูลล่วงหน้า ${ready}/${total} ชุด ระหว่างนี้บางพื้นที่อาจโหลดช้า`);
+      more = ready < total;
+      parts.push(!more ? 'ข้อมูลทุกปีคำนวณล่วงหน้าไว้แล้ว (โหลดเร็ว)'
+        : `กำลังคำนวณข้อมูลล่วงหน้า ${ready}/${total} ชุด ระหว่างนี้บางส่วนอาจโหลดช้า`);
+      setPrecompute(d.precompute);
     }
     $('coverage').textContent = parts.join(' · ');
   } catch (err) { /* ไม่จำเป็นต้องแจ้ง */ }
+  // ระหว่างที่ยังคำนวณล่วงหน้าไม่ครบ ตรวจซ้ำทุก 5 นาที (เฉพาะตอนเปิดหน้าอยู่)
+  if (more) coverageTimer = setTimeout(() => { if (document.visibilityState === 'visible') loadCoverage(); else document.addEventListener('visibilitychange', loadCoverage, { once: true }); }, 5 * 60 * 1000);
+}
+
+// =============================================================== URL (ใช้ทำ QR code)
+function writeHash() {
+  if (!booted) return;
+  const h = new URLSearchParams();
+  h.set('y', state.year);
+  h.set('s', state.season);
+  h.set('l', state.layer);
+  if (state.focus && state.focus.province) h.set('p', state.focus.province);
+  h.set('t', state.tab);
+  if (cmpOpen()) h.set('v', 'compare');
+  const next = '#' + h.toString();
+  if (location.hash !== next) history.replaceState(null, '', next);
+}
+function readHash() {
+  const h = new URLSearchParams(location.hash.replace(/^#/, ''));
+  const y = parseInt(h.get('y'), 10);
+  if (y >= cfg.first_year && y <= cfg.last_year) state.year = y;
+  const s = h.get('s');
+  if (s && cfg.seasons && cfg.seasons[s]) state.season = s;
+  const l = h.get('l');
+  if (l && LAYERS[l]) state.layer = l;
+  const t = h.get('t');
+  if (TABS.includes(t)) state.tab = t;
+  const p = h.get('p');
+  return { year: state.year === y, province: p && (PROVINCE_TH[p] || provinces.some(x => x.en === p)) ? p : null, compare: h.get('v') === 'compare' };
 }
 
 // =============================================================== เริ่มต้น
-async function init() {
-  let startupError = null;
+function showStartup(mode, extra) {
+  const box = $('startup');
+  if (mode === 'hide') { box.hidden = true; return; }
+  box.hidden = false;
+  const T = {
+    loading: ['กำลังเริ่มระบบ…', ''],
+    waking: ['กำลังเริ่มระบบ…', 'เซิร์ฟเวอร์กำลังตื่น (ถ้าไม่มีคนใช้งานสักพักอาจใช้เวลาราว 1 นาที)'],
+    retrying: ['กำลังเริ่มระบบ…', 'เซิร์ฟเวอร์กำลังตื่น (ถ้าไม่มีคนใช้งานสักพักอาจใช้เวลาราว 1 นาที)\nเชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กำลังลองใหม่…'],
+    failed: ['เชื่อมต่อเซิร์ฟเวอร์ไม่ได้', 'ตรวจการเชื่อมต่ออินเทอร์เน็ต แล้วลองใหม่อีกครั้ง'],
+    version: ['หน้าเว็บกับเซิร์ฟเวอร์เป็นคนละรุ่น', 'กรุณารีเฟรชหน้า (กด Ctrl+F5)']
+  }[mode];
+  $('suTitle').textContent = T[0];
+  $('suText').textContent = T[1] + (extra ? '\n' + extra : '');
+  $('suSpin').hidden = mode === 'failed' || mode === 'version';
+  const btn = $('suBtn');
+  btn.hidden = !(mode === 'failed' || mode === 'version');
+  btn.textContent = mode === 'version' ? 'รีเฟรชหน้า' : 'ลองใหม่อีกครั้ง';
+  btn.onclick = mode === 'version' ? () => location.reload() : () => boot();
+  if (!btn.hidden) btn.focus();
+}
+
+let booting = false;
+const BOOT_BUDGET = 120000;
+async function boot() {
+  if (booting) return;
+  booting = true;
+  showStartup('loading');
+  const t0 = Date.now();
+  let failed = false;
+  const wake = setTimeout(() => { if (!failed) showStartup('waking'); }, 3500);
   try {
-    const d = await api('/api/config');
-    if (!d.version || d.version < 3) startupError = 'เซิร์ฟเวอร์ยังเป็น app.py เวอร์ชันเก่า ให้แทนที่ไฟล์แล้วรัน python app.py ใหม่';
-    if (d.first_year) cfg = { ...cfg, ...d };
-  } catch (err) { startupError = errMsg(err); }
-  state.year = cfg.default_year;
-  for (let y = cfg.last_year; y >= cfg.first_year; y--) $('year').add(new Option(y, y));
-  $('year').value = state.year;
+    // ลองทุก 4 วินาที รวมไม่เกินราว 2 นาที แต่ละครั้งรอได้ไม่เกิน 30 วินาที (ไม่ส่งซ้อนกัน)
+    while (Date.now() - t0 < BOOT_BUDGET) {
+      const ctl = new AbortController();
+      const limit = setTimeout(() => ctl.abort(), Math.max(5000, Math.min(30000, BOOT_BUDGET - (Date.now() - t0))));
+      let d = null;
+      try { d = await api('/api/config', { signal: ctl.signal, cache: 'no-store' }); }
+      catch (err) { d = null; }
+      finally { clearTimeout(limit); }
+      if (!d) {
+        failed = true;
+        showStartup('retrying');
+        await sleep(4000);
+        continue;
+      }
+      clearTimeout(wake);
+      if (!isNum(d.version) || d.version < 5) { showStartup('version'); return; }
+      applyConfig(d);
+      showStartup('hide');
+      return;
+    }
+    clearTimeout(wake);
+    showStartup('failed');
+  } finally {
+    booting = false;
+  }
+}
+
+function applyConfig(d) {
+  cfg = { ...DEFAULT_CFG, ...d };
+  if (!cfg.seasons || !Object.keys(cfg.seasons).length) cfg.seasons = DEFAULT_CFG.seasons;
+  const want = readHash();
+  if (!want.year) state.year = cfg.default_year;
+  if (cfg.precompute && isNum(cfg.precompute.ready)) precomputeReady = cfg.precompute.ready;
+  fillYears();
+  buildSeasonSeg();
   buildLayerList();
-  renderHelpCriteria();
-  refreshPanel();
-  if (startupError) { setStatus(startupError); return; }
+  renderHelp();
+  booted = true;
   loadOverlay();
   loadProvinces();
   loadCoverage();
+  if (want.province) selectProvince(want.province);
+  if (want.compare) openCompare();
+  else if (!want.province) refreshPanel();
+  writeHash();
 }
-init();
+
+// วาดหน้าตั้งต้นทันทีจากค่าในหน้าเว็บ (ไม่ต้องรอเซิร์ฟเวอร์)
+fillYears();
+buildSeasonSeg();
+buildLayerList();
+renderLegend();
+renderHelp();
+fillProvList();
+refreshPanel();
+boot();
 </script>
 </body>
 </html>
